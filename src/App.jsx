@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
-const INTERVAL_SEARCHING = 5000
+const INTERVAL_SEARCHING = 15000
+const INTERVAL_SEARCHING_FAST = 8000
 const FALLBACK_TIMEOUT = 360000
 const LYRICS_TICK = 250
-const SILENCE_THRESHOLD = 0.008
-const SILENCE_DURATION = 4000
-const MIN_PLAY_TIME = 20000
+const SILENCE_THRESHOLD = 0.02
+const SILENCE_DURATION = 3000
+const MIN_PLAY_TIME = 15000
+const MAX_CONSECUTIVE_FAILS = 3
+const FAIL_BACKOFF = 30000
 const MIN_FONT = 12
 const MAX_FONT = 32
 const DEFAULT_FONT = 20
@@ -48,7 +51,9 @@ export default function App() {
   const lyricsTimerRef = useRef(null)
   const silenceCheckRef = useRef(null)
   const speechRef = useRef(null)
+  const consecutiveFailsRef = useRef(0)
   const lineRefs = useRef([])
+  const analyserRef = useRef(null)
   const isListeningRef = useRef(false)
   const isRecognizingRef = useRef(false)
   const currentSongKeyRef = useRef(null)
@@ -111,8 +116,32 @@ export default function App() {
     }
   }, [startLyricsTick])
 
+  // Controlla livello audio corrente — ritorna true se c'è audio sopra la soglia
+  const checkAudioLevel = useCallback(() => {
+    if (!analyserRef.current) return true // se non c'è analyser, procedi
+    const analyser = analyserRef.current
+    const dataArray = new Uint8Array(analyser.frequencyBinCount)
+    analyser.getByteTimeDomainData(dataArray)
+    let sum = 0
+    for (let i = 0; i < dataArray.length; i++) {
+      const val = (dataArray[i] - 128) / 128
+      sum += val * val
+    }
+    return Math.sqrt(sum / dataArray.length) >= SILENCE_THRESHOLD
+  }, [])
+
   const recognize = useCallback(async (stream) => {
     if (!isListeningRef.current || isRecognizingRef.current) return
+
+    // Skip API call se c'è silenzio — risparmia quota
+    if (!checkAudioLevel()) {
+      console.log('🔇 Silenzio rilevato — salto riconoscimento per risparmiare API')
+      recognizeTimerRef.current = setTimeout(() => {
+        recognize(stream)
+      }, INTERVAL_SEARCHING)
+      return
+    }
+
     isRecognizingRef.current = true
     setStatus('recognizing')
     const recordStartTime = Date.now()
@@ -138,6 +167,7 @@ export default function App() {
       fetchCounter()
 
       if (data.found) {
+        consecutiveFailsRef.current = 0
         const isNewSong = data.shazamKey !== currentSongKeyRef.current
         if (isNewSong) {
           const totalDelay = (responseTime - recordStartTime) / 1000
@@ -188,14 +218,20 @@ export default function App() {
         }, FALLBACK_TIMEOUT)
 
       } else {
+        consecutiveFailsRef.current += 1
+        const delay = consecutiveFailsRef.current >= MAX_CONSECUTIVE_FAILS
+          ? FAIL_BACKOFF
+          : INTERVAL_SEARCHING
+        console.log(`🔍 Non trovata (tentativo ${consecutiveFailsRef.current}, prossimo tra ${delay/1000}s)`)
         setStatus('listening')
         recognizeTimerRef.current = setTimeout(() => {
           isRecognizingRef.current = false
           recognize(stream)
-        }, INTERVAL_SEARCHING)
+        }, delay)
         return
       }
     } catch (err) {
+      consecutiveFailsRef.current += 1
       console.error('❌ recognize:', err.message)
       setStatus('listening')
       recognizeTimerRef.current = setTimeout(() => {
@@ -206,7 +242,7 @@ export default function App() {
     }
 
     isRecognizingRef.current = false
-  }, [fetchCounter, fetchLyrics])
+  }, [fetchCounter, fetchLyrics, checkAudioLevel])
 
   const startSilenceDetection = useCallback((stream) => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
@@ -214,6 +250,7 @@ export default function App() {
     const analyser = audioCtx.createAnalyser()
     analyser.fftSize = 1024
     source.connect(analyser)
+    analyserRef.current = analyser
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
     let silenceStart = null
 
@@ -365,9 +402,9 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Sfondo artista a tutto schermo */}
-      {song?.artistImage && (
-        <div className="bg-artist" style={{ backgroundImage: `url(${song.artistImage})` }} />
+      {/* Sfondo artista a tutto schermo — usa cover come fallback */}
+      {(song?.artistImage || song?.cover) && (
+        <div className="bg-artist" style={{ backgroundImage: `url(${song.artistImage || song.cover})` }} />
       )}
       <div className="overlay" />
 
