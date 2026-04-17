@@ -6,7 +6,7 @@ const INTERVAL_SEARCHING = 15000
 const INTERVAL_SEARCHING_FAST = 8000
 const FALLBACK_TIMEOUT = 360000
 const LYRICS_TICK = 250
-const SILENCE_THRESHOLD = 0.05
+const SILENCE_THRESHOLD = 0.018
 const SILENCE_DURATION = 2000
 const MIN_PLAY_TIME = 15000
 const MAX_CONSECUTIVE_FAILS = 3
@@ -130,17 +130,18 @@ export default function App() {
     return Math.sqrt(sum / dataArray.length) >= SILENCE_THRESHOLD
   }, [])
 
-  const recognize = useCallback(async (stream) => {
+  const recognize = useCallback(async (stream, force = false) => {
     if (!isListeningRef.current || isRecognizingRef.current) return
 
-    // Skip API call se c'è silenzio — risparmia quota
-    if (!checkAudioLevel()) {
+    // Skip API call se c'è silenzio — risparmia quota (ma non se forzato da voice/skip)
+    if (!force && !checkAudioLevel()) {
       console.log('🔇 Silenzio rilevato — salto riconoscimento per risparmiare API')
       recognizeTimerRef.current = setTimeout(() => {
         recognize(stream)
       }, INTERVAL_SEARCHING)
       return
     }
+    if (force) console.log('⚡ Riconoscimento forzato (skip/voice)')
 
     isRecognizingRef.current = true
     setStatus('recognizing')
@@ -271,26 +272,35 @@ export default function App() {
         console.log(`📊 Audio RMS: ${rms.toFixed(4)} | soglia: ${SILENCE_THRESHOLD} | silenceReady: ${silenceReadyRef.current} | silenceActive: ${silenceActiveRef.current}`)
       }
 
+      // FASE 1: Se silenzio è già stato rilevato, controlla se l'audio è ripreso
+      // (questo deve funzionare INDIPENDENTEMENTE da silenceReady)
+      if (silenceActiveRef.current) {
+        if (rms >= SILENCE_THRESHOLD) {
+          console.log(`🎵 Audio ripreso (RMS: ${rms.toFixed(4)}) — riconosco nuova canzone...`)
+          silenceActiveRef.current = false
+          silenceStart = null
+          isRecognizingRef.current = false
+          recognize(stream, true)
+        }
+        return
+      }
+
+      // FASE 2: Cerca inizio silenzio (solo quando silenceReady è attivo)
       if (!silenceReadyRef.current || isRecognizingRef.current) return
 
       if (rms < SILENCE_THRESHOLD) {
         if (!silenceStart) { silenceStart = Date.now(); console.log(`🔇 Inizio silenzio (RMS: ${rms.toFixed(4)})`) }
-        if ((Date.now() - silenceStart) > SILENCE_DURATION && !silenceActiveRef.current) {
+        if ((Date.now() - silenceStart) > SILENCE_DURATION) {
           console.log(`🔇 Silenzio confermato dopo ${SILENCE_DURATION}ms — pronto per prossima canzone`)
           silenceActiveRef.current = true
           silenceReadyRef.current = false
           currentSongKeyRef.current = null
           if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
+          if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
           setStatus('listening')
         }
       } else {
         silenceStart = null
-        if (silenceActiveRef.current) {
-          console.log(`🎵 Audio ripreso (RMS: ${rms.toFixed(4)}) — riconosco...`)
-          silenceActiveRef.current = false
-          isRecognizingRef.current = false
-          recognize(stream)
-        }
       }
     }, 300)
   }, [recognize])
@@ -311,7 +321,8 @@ export default function App() {
         if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
         if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
         isRecognizingRef.current = false
-        recognize(stream)
+        silenceActiveRef.current = false
+        recognize(stream, true)
       }
     }
     speech.onerror = () => {}
@@ -324,10 +335,11 @@ export default function App() {
     console.log('⏭ Skip manuale')
     currentSongKeyRef.current = null
     silenceReadyRef.current = false
+    silenceActiveRef.current = false
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
     if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
     isRecognizingRef.current = false
-    recognize(streamRef.current)
+    recognize(streamRef.current, true)
   }, [recognize])
 
   const startListening = useCallback(async () => {
@@ -417,7 +429,6 @@ export default function App() {
           src={song.artistImage || song.cover}
           alt=""
           className="bg-artist"
-          crossOrigin="anonymous"
           onError={(e) => { if (song?.cover && e.target.src !== song.cover) e.target.src = song.cover }}
         />
       )}
