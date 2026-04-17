@@ -6,8 +6,8 @@ const INTERVAL_SEARCHING = 15000
 const INTERVAL_SEARCHING_FAST = 8000
 const FALLBACK_TIMEOUT = 360000
 const LYRICS_TICK = 250
-const SILENCE_THRESHOLD = 0.02
-const SILENCE_DURATION = 3000
+const SILENCE_THRESHOLD = 0.05
+const SILENCE_DURATION = 2000
 const MIN_PLAY_TIME = 15000
 const MAX_CONSECUTIVE_FAILS = 3
 const FAIL_BACKOFF = 30000
@@ -254,8 +254,9 @@ export default function App() {
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
     let silenceStart = null
 
+    let logCounter = 0
     silenceCheckRef.current = setInterval(() => {
-      if (!isListeningRef.current || !silenceReadyRef.current || isRecognizingRef.current) return
+      if (!isListeningRef.current) return
       analyser.getByteTimeDomainData(dataArray)
       let sum = 0
       for (let i = 0; i < dataArray.length; i++) {
@@ -264,10 +265,18 @@ export default function App() {
       }
       const rms = Math.sqrt(sum / dataArray.length)
 
+      // Log livello audio ogni ~3 secondi per debug (10 * 300ms)
+      logCounter++
+      if (logCounter % 10 === 0) {
+        console.log(`📊 Audio RMS: ${rms.toFixed(4)} | soglia: ${SILENCE_THRESHOLD} | silenceReady: ${silenceReadyRef.current} | silenceActive: ${silenceActiveRef.current}`)
+      }
+
+      if (!silenceReadyRef.current || isRecognizingRef.current) return
+
       if (rms < SILENCE_THRESHOLD) {
-        if (!silenceStart) silenceStart = Date.now()
+        if (!silenceStart) { silenceStart = Date.now(); console.log(`🔇 Inizio silenzio (RMS: ${rms.toFixed(4)})`) }
         if ((Date.now() - silenceStart) > SILENCE_DURATION && !silenceActiveRef.current) {
-          console.log('🔇 Silenzio rilevato — pronto per prossima canzone')
+          console.log(`🔇 Silenzio confermato dopo ${SILENCE_DURATION}ms — pronto per prossima canzone`)
           silenceActiveRef.current = true
           silenceReadyRef.current = false
           currentSongKeyRef.current = null
@@ -277,7 +286,7 @@ export default function App() {
       } else {
         silenceStart = null
         if (silenceActiveRef.current) {
-          console.log('🎵 Audio ripreso — riconosco...')
+          console.log(`🎵 Audio ripreso (RMS: ${rms.toFixed(4)}) — riconosco...`)
           silenceActiveRef.current = false
           isRecognizingRef.current = false
           recognize(stream)
@@ -404,7 +413,13 @@ export default function App() {
     <div className="app">
       {/* Sfondo artista a tutto schermo — usa cover come fallback */}
       {(song?.artistImage || song?.cover) && (
-        <div className="bg-artist" style={{ backgroundImage: `url(${song.artistImage || song.cover})` }} />
+        <img
+          src={song.artistImage || song.cover}
+          alt=""
+          className="bg-artist"
+          crossOrigin="anonymous"
+          onError={(e) => { if (song?.cover && e.target.src !== song.cover) e.target.src = song.cover }}
+        />
       )}
       <div className="overlay" />
 
