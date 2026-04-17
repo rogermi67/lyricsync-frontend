@@ -116,31 +116,8 @@ export default function App() {
     }
   }, [startLyricsTick])
 
-  // Controlla livello audio corrente — ritorna true se c'è audio sopra la soglia
-  const checkAudioLevel = useCallback(() => {
-    if (!analyserRef.current) return true // se non c'è analyser, procedi
-    const analyser = analyserRef.current
-    const dataArray = new Uint8Array(analyser.frequencyBinCount)
-    analyser.getByteTimeDomainData(dataArray)
-    let sum = 0
-    for (let i = 0; i < dataArray.length; i++) {
-      const val = (dataArray[i] - 128) / 128
-      sum += val * val
-    }
-    return Math.sqrt(sum / dataArray.length) >= SILENCE_THRESHOLD
-  }, [])
-
   const recognize = useCallback(async (stream, force = false) => {
     if (!isListeningRef.current || isRecognizingRef.current) return
-
-    // Skip API call se c'è silenzio — risparmia quota (ma non se forzato da voice/skip)
-    if (!force && !checkAudioLevel()) {
-      console.log('🔇 Silenzio rilevato — salto riconoscimento per risparmiare API')
-      recognizeTimerRef.current = setTimeout(() => {
-        recognize(stream)
-      }, INTERVAL_SEARCHING)
-      return
-    }
     if (force) console.log('⚡ Riconoscimento forzato (skip/voice)')
 
     isRecognizingRef.current = true
@@ -243,7 +220,7 @@ export default function App() {
     }
 
     isRecognizingRef.current = false
-  }, [fetchCounter, fetchLyrics, checkAudioLevel])
+  }, [fetchCounter, fetchLyrics])
 
   const startSilenceDetection = useCallback((stream) => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
