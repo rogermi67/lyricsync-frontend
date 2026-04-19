@@ -258,6 +258,7 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   display: flex;
   flex-direction: column;
   gap: 2px;
+  scroll-margin-top: 18vh;
 }
 
 .lyric-translation {
