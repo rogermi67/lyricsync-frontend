@@ -63,6 +63,7 @@ export default function App() {
   const songFoundTimeRef = useRef(null)
   const autoNextTimerRef = useRef(null)
   const anchorTimeRef = useRef(null)
+  const recognizeRef = useRef(null)
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
 
@@ -98,7 +99,7 @@ export default function App() {
           if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
           if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
           isRecognizingRef.current = false
-          if (streamRef.current) recognize(streamRef.current)
+          if (streamRef.current && recognizeRef.current) recognizeRef.current(streamRef.current)
         }, timeUntilEnd * 1000)
         console.log(`⏱️ Auto-next programmato tra ${Math.round(timeUntilEnd)}s (ultimo sync: ${lastTime.toFixed(0)}s + 20s)`)
       }
@@ -120,7 +121,7 @@ export default function App() {
       const progress = duration > 0 ? Math.min(100, ((el - currentTime) / duration) * 100) : 0
       setKaraokeProgress(progress)
     }, LYRICS_TICK)
-  }, [recognize])
+  }, [])
 
   const fetchLyrics = useCallback(async (title, artist, album, offset, anchorTime = Date.now()) => {
     console.log(`📝 Cerco testi: "${title}" offset=${offset.toFixed(1)}s`)
@@ -278,6 +279,9 @@ export default function App() {
 
     isRecognizingRef.current = false
   }, [fetchCounter, fetchLyrics])
+
+  // Mantieni ref aggiornato per evitare dipendenza circolare con startLyricsTick
+  useEffect(() => { recognizeRef.current = recognize }, [recognize])
 
   const startSilenceDetection = useCallback((stream) => {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
