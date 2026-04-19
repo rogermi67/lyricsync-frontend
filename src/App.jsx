@@ -44,6 +44,8 @@ export default function App() {
   const [translating, setTranslating] = useState(false)
   const [karaokeMode, setKaraokeMode] = useState(false)
   const [karaokeProgress, setKaraokeProgress] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+  const [estimatedDuration, setEstimatedDuration] = useState(0)
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -59,6 +61,8 @@ export default function App() {
   const currentSongKeyRef = useRef(null)
   const previousSongKeyRef = useRef(null)
   const songFoundTimeRef = useRef(null)
+  const autoNextTimerRef = useRef(null)
+  const anchorTimeRef = useRef(null)
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
 
@@ -74,11 +78,38 @@ export default function App() {
 
   const startLyricsTick = useCallback((parsedLyrics, startTime) => {
     if (lyricsTimerRef.current) clearInterval(lyricsTimerRef.current)
+    if (autoNextTimerRef.current) clearTimeout(autoNextTimerRef.current)
+    anchorTimeRef.current = startTime
+
+    // Calcola durata stimata: ultimo timestamp + 30s per l'outro
+    const lastTime = parsedLyrics.length > 0 ? parsedLyrics[parsedLyrics.length - 1].time : 0
+    const estDuration = lastTime > 0 ? lastTime + 30 : 0
+    setEstimatedDuration(estDuration)
+
+    // Auto-next: dopo l'ultimo timestamp + 20s, forza nuovo riconoscimento
+    if (lastTime > 0) {
+      const now = (Date.now() - startTime) / 1000
+      const timeUntilEnd = (lastTime + 20) - now
+      if (timeUntilEnd > 0) {
+        autoNextTimerRef.current = setTimeout(() => {
+          console.log('⏭ Auto-next: testo finito, cerco prossima canzone')
+          currentSongKeyRef.current = null
+          silenceReadyRef.current = false
+          if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
+          if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
+          isRecognizingRef.current = false
+          if (streamRef.current) recognize(streamRef.current)
+        }, timeUntilEnd * 1000)
+        console.log(`⏱️ Auto-next programmato tra ${Math.round(timeUntilEnd)}s (ultimo sync: ${lastTime.toFixed(0)}s + 20s)`)
+      }
+    }
+
     lyricsTimerRef.current = setInterval(() => {
-      const elapsed = (Date.now() - startTime) / 1000
+      const el = (Date.now() - startTime) / 1000
+      setElapsed(el)
       let idx = 0
       for (let i = 0; i < parsedLyrics.length; i++) {
-        if (parsedLyrics[i].time <= elapsed) idx = i
+        if (parsedLyrics[i].time <= el) idx = i
         else break
       }
       setCurrentLine(idx)
@@ -86,10 +117,10 @@ export default function App() {
       const currentTime = parsedLyrics[idx]?.time || 0
       const nextTime = parsedLyrics[idx + 1]?.time || (currentTime + 5)
       const duration = nextTime - currentTime
-      const progress = duration > 0 ? Math.min(100, ((elapsed - currentTime) / duration) * 100) : 0
+      const progress = duration > 0 ? Math.min(100, ((el - currentTime) / duration) * 100) : 0
       setKaraokeProgress(progress)
     }, LYRICS_TICK)
-  }, [])
+  }, [recognize])
 
   const fetchLyrics = useCallback(async (title, artist, album, offset, anchorTime = Date.now()) => {
     console.log(`📝 Cerco testi: "${title}" offset=${offset.toFixed(1)}s`)
@@ -181,6 +212,9 @@ export default function App() {
           songFoundTimeRef.current = Date.now()
           silenceReadyRef.current = false
           silenceActiveRef.current = false
+          if (autoNextTimerRef.current) clearTimeout(autoNextTimerRef.current)
+          setElapsed(0)
+          setEstimatedDuration(0)
 
           setSong(data)
           setCurrentLine(0)
@@ -363,6 +397,7 @@ export default function App() {
     isRecognizingRef.current = false
     if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
+    if (autoNextTimerRef.current) clearTimeout(autoNextTimerRef.current)
     if (lyricsTimerRef.current) clearInterval(lyricsTimerRef.current)
     if (silenceCheckRef.current) clearInterval(silenceCheckRef.current)
     if (speechRef.current) { try { speechRef.current.stop() } catch {} }
@@ -413,6 +448,13 @@ export default function App() {
     }
     setTranslating(false)
   }, [translating, showTranslation, translatedLyrics, lyrics, plainLyrics, song])
+
+  const formatTime = (seconds) => {
+    if (!seconds || seconds < 0) return '0:00'
+    const m = Math.floor(seconds / 60)
+    const s = Math.floor(seconds % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   const statusLabel = {
     idle: 'Premi play per iniziare',
@@ -498,6 +540,16 @@ export default function App() {
                   YouTube
                 </a>
               </div>
+              {/* Progress bar e durata */}
+              {estimatedDuration > 0 && status === 'playing' && (
+                <div className="song-progress">
+                  <span className="song-time">{formatTime(elapsed)}</span>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${Math.min(100, (elapsed / estimatedDuration) * 100)}%` }} />
+                  </div>
+                  <span className="song-time">~{formatTime(estimatedDuration)}</span>
+                </div>
+              )}
             </>
           ) : (
             <h1 className="song-title placeholder">LyricSync</h1>
