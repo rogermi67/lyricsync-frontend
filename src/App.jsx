@@ -6,8 +6,8 @@ const INTERVAL_SEARCHING = 15000
 const INTERVAL_SEARCHING_FAST = 8000
 const FALLBACK_TIMEOUT = 360000
 const LYRICS_TICK = 250
-const SILENCE_THRESHOLD = 0.018
-const SILENCE_DURATION = 2000
+const SILENCE_THRESHOLD = 0.01
+const SILENCE_DURATION = 5000
 const MIN_PLAY_TIME = 15000
 const MAX_CONSECUTIVE_FAILS = 3
 const FAIL_BACKOFF = 30000
@@ -57,6 +57,8 @@ export default function App() {
   const isListeningRef = useRef(false)
   const isRecognizingRef = useRef(false)
   const currentSongKeyRef = useRef(null)
+  const previousSongKeyRef = useRef(null)
+  const songFoundTimeRef = useRef(null)
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
 
@@ -146,13 +148,37 @@ export default function App() {
 
       if (data.found) {
         consecutiveFailsRef.current = 0
-        const isNewSong = data.shazamKey !== currentSongKeyRef.current
-        if (isNewSong) {
+        // Controlla se è la stessa canzone (anche dopo reset da silence detection)
+        const isCurrentSong = data.shazamKey === currentSongKeyRef.current
+        const isSameAsPrevious = data.shazamKey === previousSongKeyRef.current
+        const recentlyFound = songFoundTimeRef.current && (Date.now() - songFoundTimeRef.current) < FALLBACK_TIMEOUT
+
+        if (isCurrentSong) {
+          // Stessa canzone in corso — non fare nulla
+          console.log('🔄 Stessa canzone, nessuna azione')
+          setStatus('playing')
+        } else if (isSameAsPrevious && recentlyFound) {
+          // Silence detection ha triggerato ma è sempre la stessa canzone
+          // Ripristina lo stato senza ri-caricare testi
+          console.log('🔄 Stessa canzone dopo pausa — ripristino senza sprecare chiamate')
+          currentSongKeyRef.current = data.shazamKey
+          silenceReadyRef.current = false
+          silenceActiveRef.current = false
+          setStatus('playing')
+          setTimeout(() => {
+            if (currentSongKeyRef.current === data.shazamKey) {
+              silenceReadyRef.current = true
+            }
+          }, MIN_PLAY_TIME)
+        } else {
+          // NUOVA canzone davvero
           const totalDelay = (responseTime - recordStartTime) / 1000
           const actualOffset = (data.timeskip || 0) + totalDelay
           console.log(`🎵 ${data.title} | shazam: ${data.timeskip?.toFixed(1)}s + delay: ${totalDelay.toFixed(1)}s = ${actualOffset.toFixed(1)}s`)
 
           currentSongKeyRef.current = data.shazamKey
+          previousSongKeyRef.current = data.shazamKey
+          songFoundTimeRef.current = Date.now()
           silenceReadyRef.current = false
           silenceActiveRef.current = false
 
@@ -180,16 +206,13 @@ export default function App() {
           }, MIN_PLAY_TIME)
 
           await fetchLyrics(data.title, data.artist, data.album, actualOffset, responseTime)
-
-        } else {
-          console.log('🔄 Stessa canzone')
-          setStatus('playing')
         }
 
         if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
         fallbackTimerRef.current = setTimeout(() => {
           console.log('⏰ Fallback 6 min — forzo nuovo riconoscimento')
           currentSongKeyRef.current = null
+          previousSongKeyRef.current = null
           silenceReadyRef.current = false
           isRecognizingRef.current = false
           recognize(stream)
@@ -345,6 +368,8 @@ export default function App() {
     if (speechRef.current) { try { speechRef.current.stop() } catch {} }
     streamRef.current?.getTracks().forEach(t => t.stop())
     currentSongKeyRef.current = null
+    previousSongKeyRef.current = null
+    songFoundTimeRef.current = null
     silenceReadyRef.current = false
     silenceActiveRef.current = false
     setStatus('idle')
