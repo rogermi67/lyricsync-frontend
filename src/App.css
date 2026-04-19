@@ -250,8 +250,8 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 28vh;
-  padding-bottom: 32vh;
+  padding-top: 8vh;
+  padding-bottom: 60vh;
 }
 
 .lyric-block {
