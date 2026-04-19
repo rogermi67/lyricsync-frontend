@@ -85,6 +85,7 @@ export default function App() {
     // Calcola durata stimata: ultimo timestamp + 30s per l'outro
     const lastTime = parsedLyrics.length > 0 ? parsedLyrics[parsedLyrics.length - 1].time : 0
     const estDuration = lastTime > 0 ? lastTime + 30 : 0
+    console.log(`⏱️ Durata stimata: ${Math.round(estDuration)}s (ultimo sync: ${lastTime.toFixed(0)}s, righe: ${parsedLyrics.length})`)
     setEstimatedDuration(estDuration)
 
     // Auto-next: dopo l'ultimo timestamp + 20s, forza nuovo riconoscimento
@@ -544,16 +545,6 @@ export default function App() {
                   YouTube
                 </a>
               </div>
-              {/* Progress bar e durata */}
-              {estimatedDuration > 0 && status === 'playing' && (
-                <div className="song-progress">
-                  <span className="song-time">{formatTime(elapsed)}</span>
-                  <div className="progress-bar">
-                    <div className="progress-fill" style={{ width: `${Math.min(100, (elapsed / estimatedDuration) * 100)}%` }} />
-                  </div>
-                  <span className="song-time">~{formatTime(estimatedDuration)}</span>
-                </div>
-              )}
             </>
           ) : (
             <h1 className="song-title placeholder">LyricSync</h1>
@@ -566,6 +557,17 @@ export default function App() {
           <button className="icon-btn" onClick={() => setShowHistory(h => !h)} title="Cronologia" aria-label="View history">🕒</button>
         </div>
       </header>
+
+      {/* Progress bar sotto l'header */}
+      {estimatedDuration > 0 && status === 'playing' && (
+        <div className="song-progress-container">
+          <span className="song-time">{formatTime(elapsed)}</span>
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${Math.min(100, (elapsed / estimatedDuration) * 100)}%` }} />
+          </div>
+          <span className="song-time">~{formatTime(estimatedDuration)}</span>
+        </div>
+      )}
 
       {/* Area testi */}
       <main className="lyrics-area">
