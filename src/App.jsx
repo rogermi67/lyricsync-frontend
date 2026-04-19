@@ -74,7 +74,14 @@ export default function App() {
   useEffect(() => { fetchCounter() }, [fetchCounter])
 
   useEffect(() => {
-    lineRefs.current[currentLine]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = lineRefs.current[currentLine]
+    const container = document.querySelector('.lyrics-area')
+    if (el && container) {
+      const elTop = el.getBoundingClientRect().top
+      const containerTop = container.getBoundingClientRect().top
+      const targetOffset = container.clientHeight * 0.2
+      container.scrollBy({ top: elTop - containerTop - targetOffset, behavior: 'smooth' })
+    }
   }, [currentLine])
 
   const startLyricsTick = useCallback((parsedLyrics, startTime) => {
