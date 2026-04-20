@@ -10,8 +10,9 @@ const LYRICS_TICK = 250
 const SILENCE_THRESHOLD = 0.01
 const SILENCE_DURATION = 8000
 const MIN_PLAY_TIME = 15000
-const MAX_CONSECUTIVE_FAILS = 3
-const FAIL_BACKOFF = 30000
+const MAX_CONSECUTIVE_FAILS = 2
+const FAIL_BACKOFF_BASE = 30000   // 30s dopo il primo fail
+const FAIL_BACKOFF_MAX = 300000   // max 5 minuti tra tentativi
 const MIN_FONT = 12
 const MAX_FONT = 32
 const DEFAULT_FONT = 20
@@ -452,10 +453,12 @@ export default function App() {
           return
         }
 
-        const delay = consecutiveFailsRef.current >= MAX_CONSECUTIVE_FAILS
-          ? FAIL_BACKOFF
-          : INTERVAL_SEARCHING
-        console.log(`🔍 Non trovata (tentativo ${consecutiveFailsRef.current}, prossimo tra ${delay/1000}s)`)
+        // Backoff esponenziale: 20s, 30s, 60s, 120s, 240s, max 300s
+        const fails = consecutiveFailsRef.current
+        const delay = fails <= 1
+          ? INTERVAL_SEARCHING
+          : Math.min(FAIL_BACKOFF_BASE * Math.pow(2, fails - MAX_CONSECUTIVE_FAILS), FAIL_BACKOFF_MAX)
+        console.log(`🔍 Non trovata (tentativo ${fails}, prossimo tra ${Math.round(delay/1000)}s)`)
         setStatus('listening')
         recognizeTimerRef.current = setTimeout(() => {
           isRecognizingRef.current = false
@@ -474,11 +477,15 @@ export default function App() {
         return
       }
 
+      const fails = consecutiveFailsRef.current
+      const delay = fails <= 1
+        ? INTERVAL_SEARCHING
+        : Math.min(FAIL_BACKOFF_BASE * Math.pow(2, fails - MAX_CONSECUTIVE_FAILS), FAIL_BACKOFF_MAX)
       setStatus('listening')
       recognizeTimerRef.current = setTimeout(() => {
         isRecognizingRef.current = false
         recognize(stream)
-      }, INTERVAL_SEARCHING)
+      }, delay)
       return
     }
 
