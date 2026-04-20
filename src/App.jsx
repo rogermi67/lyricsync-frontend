@@ -154,6 +154,8 @@ export default function App() {
   const [discogsLoading, setDiscogsLoading] = useState(false)
   const [discogsConfig, setDiscogsConfig] = useState({ configured: false, username: '' })
   const [discogsForm, setDiscogsForm] = useState({ username: '', consumerKey: '', consumerSecret: '' })
+  const [discogsFields, setDiscogsFields] = useState({})
+  const [discogsFieldsForm, setDiscogsFieldsForm] = useState({})
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -762,6 +764,14 @@ export default function App() {
           if (data.username) setDiscogsForm(f => ({ ...f, username: data.username }))
         })
         .catch(() => {})
+      // Carica nomi campi personalizzati
+      fetch(`${BACKEND}/discogs/fields`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(data => {
+          setDiscogsFields(data.fields || {})
+          setDiscogsFieldsForm(data.fields || {})
+        })
+        .catch(() => {})
     }
   }, [showSettings, authenticated, fetchApiKeys])
 
@@ -985,6 +995,36 @@ export default function App() {
                       }
                     } catch { alert('Errore di connessione') }
                   }}>Collega Discogs</button>
+              </div>
+            )}
+            {discogsConfig.configured && (
+              <div className="settings-discogs-fields">
+                <p className="settings-hint">Nomi campi personalizzati (dalla tua collezione Discogs)</p>
+                {[1,2,3,4,5,6].map(id => (
+                  <div key={id} className="settings-field-row">
+                    <span className="settings-field-id">{id}</span>
+                    <input type="text" value={discogsFieldsForm[id] || ''}
+                      onChange={e => setDiscogsFieldsForm(f => ({ ...f, [id]: e.target.value }))}
+                      placeholder={`Campo ${id}`}
+                      className="settings-key-input" />
+                  </div>
+                ))}
+                <button className="settings-btn-small" onClick={async () => {
+                  // Rimuovi campi vuoti
+                  const cleaned = {};
+                  for (const [k, v] of Object.entries(discogsFieldsForm)) {
+                    if (v && v.trim()) cleaned[k] = v.trim();
+                  }
+                  try {
+                    const res = await fetch(`${BACKEND}/discogs/fields`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                      body: JSON.stringify({ fields: cleaned })
+                    });
+                    if (res.ok) { setDiscogsFields(cleaned); alert('Nomi campi salvati') }
+                    else alert('Errore nel salvataggio')
+                  } catch { alert('Errore di connessione') }
+                }}>Salva nomi campi</button>
               </div>
             )}
           </div>

@@ -813,6 +813,29 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   flex-direction: column;
   gap: 8px;
 }
+.settings-discogs-fields {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-field-id {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: monospace;
+  min-width: 18px;
+  text-align: center;
+}
 
 .settings-logout { padding: 24px; }
 .settings-btn-danger {
