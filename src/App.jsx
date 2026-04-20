@@ -100,6 +100,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [apiKeys, setApiKeys] = useState([])
   const [newApiKey, setNewApiKey] = useState('')
+  const [newApiEmail, setNewApiEmail] = useState('')
   const [keysLoading, setKeysLoading] = useState(false)
   const [fontSize, setFontSize] = useState(prefs.fontSize || DEFAULT_FONT)
   const [translatedLyrics, setTranslatedLyrics] = useState({})
@@ -651,10 +652,10 @@ export default function App() {
       const res = await fetch(`${BACKEND}/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ key: newApiKey.trim() })
+        body: JSON.stringify({ key: newApiKey.trim(), email: newApiEmail.trim() })
       })
       const data = await res.json()
-      if (res.ok) { setNewApiKey(''); await fetchApiKeys(); fetchCounter() }
+      if (res.ok) { setNewApiKey(''); setNewApiEmail(''); await fetchApiKeys(); fetchCounter() }
       else alert(data.error || 'Errore')
     } catch { alert('Errore di connessione') }
     setKeysLoading(false)
@@ -828,20 +829,31 @@ export default function App() {
           <div className="settings-group">
             <label className="settings-label">Chiavi API Shazam ({apiKeys.length})</label>
             {apiKeys.map((k, i) => (
-              <div key={i} className="settings-key-row">
-                <span className="settings-key-name">{k.prefix}</span>
-                <span className="settings-key-source">{k.source}</span>
-                <span className={`settings-key-status ${k.exhausted ? 'exhausted' : ''}`}>
-                  {k.exhausted ? 'esaurita' : `${k.remaining}`}
-                </span>
-                {k.source === 'redis' && (
-                  <button className="settings-key-remove" onClick={() => removeApiKey(k.index)} disabled={keysLoading}>✕</button>
+              <div key={i} className="settings-key-card">
+                <div className="settings-key-row">
+                  <span className="settings-key-name">{k.prefix}</span>
+                  <span className="settings-key-source">{k.source}</span>
+                  <span className={`settings-key-status ${k.exhausted ? 'exhausted' : ''}`}>
+                    {k.exhausted ? 'esaurita' : `${k.remaining} rimaste`}
+                  </span>
+                  {k.source === 'redis' && (
+                    <button className="settings-key-remove" onClick={() => removeApiKey(k.index)} disabled={keysLoading}>✕</button>
+                  )}
+                </div>
+                {(k.email || k.addedAt) && (
+                  <div className="settings-key-meta">
+                    {k.email && <span>{k.email}</span>}
+                    {k.addedAt && <span>aggiunta il {k.addedAt}</span>}
+                  </div>
                 )}
               </div>
             ))}
             <div className="settings-add-key">
               <input type="text" value={newApiKey} onChange={e => setNewApiKey(e.target.value)}
-                placeholder="Incolla nuova chiave RapidAPI" className="settings-key-input"
+                placeholder="Chiave RapidAPI" className="settings-key-input"
+                onKeyDown={e => e.key === 'Enter' && addApiKey()} />
+              <input type="email" value={newApiEmail} onChange={e => setNewApiEmail(e.target.value)}
+                placeholder="Email account RapidAPI" className="settings-key-input"
                 onKeyDown={e => e.key === 'Enter' && addApiKey()} />
               <button className="settings-btn-small" onClick={addApiKey} disabled={keysLoading || !newApiKey.trim()}>
                 {keysLoading ? '...' : '+ Aggiungi'}

@@ -699,8 +699,16 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 }
 .settings-key-remove:hover { background: rgba(255,100,100,0.15); }
 .settings-key-remove:disabled { opacity: 0.3; cursor: not-allowed; }
+.settings-key-card {
+  padding: 8px 0; border-bottom: 1px solid rgba(232,201,126,0.04);
+}
+.settings-key-card:last-of-type { border-bottom: none; }
+.settings-key-meta {
+  display: flex; gap: 12px; margin-top: 4px;
+  font-size: 0.7rem; color: var(--text-dim); padding-left: 2px;
+}
 .settings-add-key {
-  display: flex; gap: 8px; margin-top: 12px; align-items: center;
+  display: flex; flex-direction: column; gap: 8px; margin-top: 14px;
 }
 .settings-key-input {
   flex: 1; padding: 8px 10px; border-radius: 8px;
