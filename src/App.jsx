@@ -680,8 +680,10 @@ export default function App() {
     }
     // Raccogli testo da tradurre
     let textToTranslate = ''
+    let linesArray = null
     if (lyrics.length > 0) {
-      textToTranslate = lyrics.map(l => l.text).filter(Boolean).join('\n')
+      linesArray = lyrics.map(l => l.text || '')
+      textToTranslate = linesArray.join('\n')
     } else if (plainLyrics) {
       textToTranslate = plainLyrics
     }
@@ -689,10 +691,14 @@ export default function App() {
 
     setTranslating(true)
     try {
+      // Invia come array di righe per mantenere l'allineamento 1:1
+      const body = linesArray
+        ? { lines: linesArray, targetLang: transLang }
+        : { text: textToTranslate, targetLang: transLang }
       const res = await fetch(`${BACKEND}/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ text: textToTranslate, targetLang: transLang })
+        body: JSON.stringify(body)
       })
       const data = await res.json()
       if (data.translated) {
