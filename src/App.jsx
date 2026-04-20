@@ -1069,16 +1069,27 @@ export default function App() {
 
       {/* Info Discogs */}
       {discogsInfo && (
-        <a href={discogsInfo.discogsUrl} target="_blank" rel="noopener noreferrer" className="discogs-bar">
-          <span className="discogs-badge">{discogsInfo.inCollection ? '💿 In collezione' : '💿 Discogs'}</span>
-          <span className="discogs-details">
-            {discogsInfo.label && <span>{discogsInfo.label}</span>}
-            {discogsInfo.year && <span>{discogsInfo.year}</span>}
-            {discogsInfo.format && <span>{discogsInfo.format}</span>}
-            {discogsInfo.country && <span>{discogsInfo.country}</span>}
-            {discogsInfo.catno && <span className="discogs-catno">{discogsInfo.catno}</span>}
-          </span>
-        </a>
+        <div className="discogs-bar-wrap">
+          <a href={discogsInfo.discogsUrl} target="_blank" rel="noopener noreferrer" className="discogs-bar">
+            <span className="discogs-badge">{discogsInfo.inCollection ? '💿 In collezione' : '💿 Discogs'}</span>
+            <span className="discogs-details">
+              {discogsInfo.label && <span>{discogsInfo.label}</span>}
+              {discogsInfo.year && <span>{discogsInfo.year}</span>}
+              {discogsInfo.format && <span>{discogsInfo.format}</span>}
+              {discogsInfo.catno && <span className="discogs-catno">{discogsInfo.catno}</span>}
+            </span>
+            {discogsInfo.rating > 0 && (
+              <span className="discogs-rating">{'★'.repeat(discogsInfo.rating)}{'☆'.repeat(5 - discogsInfo.rating)}</span>
+            )}
+          </a>
+          {discogsInfo.notes && discogsInfo.notes.length > 0 && discogsInfo.notes.some(n => n.value) && (
+            <div className="discogs-notes">
+              {discogsInfo.notes.filter(n => n.value).map((n, i) => (
+                <span key={i} className="discogs-note">{n.value}</span>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Area testi */}

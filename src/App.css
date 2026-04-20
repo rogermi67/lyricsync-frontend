@@ -719,16 +719,18 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 .settings-key-input:focus { border-color: var(--accent); }
 .settings-key-input::placeholder { color: var(--text-dim); font-family: 'DM Sans', sans-serif; }
 /* ─── Discogs bar ───────────────────────────────────────────────────────── */
-.discogs-bar {
+.discogs-bar-wrap {
   position: relative;
   z-index: 10;
+  background: rgba(255,255,255,0.04);
+  border-top: 1px solid rgba(232,201,126,0.06);
+  border-bottom: 1px solid rgba(232,201,126,0.06);
+}
+.discogs-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 8px 28px;
-  background: rgba(255,255,255,0.04);
-  border-top: 1px solid rgba(232,201,126,0.06);
-  border-bottom: 1px solid rgba(232,201,126,0.06);
   text-decoration: none;
   transition: background 0.25s ease;
   overflow: hidden;
@@ -751,6 +753,8 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   color: var(--text-mid);
   overflow: hidden;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 .discogs-details span {
   white-space: nowrap;
@@ -765,6 +769,28 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   font-size: 0.68rem;
   color: var(--text-dim);
   letter-spacing: 0.04em;
+}
+.discogs-rating {
+  font-size: 0.8rem;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 1px;
+}
+.discogs-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 4px 28px 8px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.discogs-note {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ─── Discogs settings ──────────────────────────────────────────────────── */
