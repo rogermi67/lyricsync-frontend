@@ -66,7 +66,16 @@ function parseLRC(lrc) {
   }).filter(Boolean)
 }
 
+// ─── Auth helper ────────────────────────────────────────────────────────────
+function getAuthToken() { return localStorage.getItem('lyricsync_token') || '' }
+function authHeaders() { return { 'X-App-Token': getAuthToken() } }
+
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(!!localStorage.getItem('lyricsync_token'))
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+
   const [status, setStatus] = useState('idle')
   const [song, setSong] = useState(null)
   const [lyrics, setLyrics] = useState([])
@@ -110,7 +119,7 @@ export default function App() {
   const wakeLockRef = useRef(null)
 
   const fetchCounter = useCallback(async () => {
-    try { const res = await fetch(`${BACKEND}/counter`); setCounter(await res.json()) } catch {}
+    try { const res = await fetch(`${BACKEND}/counter`, { headers: authHeaders() }); setCounter(await res.json()) } catch {}
   }, [])
 
   useEffect(() => { fetchCounter() }, [fetchCounter])
@@ -198,7 +207,7 @@ export default function App() {
     try {
       const params = new URLSearchParams({ title, artist })
       if (album) params.append('album', album)
-      const res = await fetch(`${BACKEND}/lyrics?${params}`)
+      const res = await fetch(`${BACKEND}/lyrics?${params}`, { headers: authHeaders() })
       const data = await res.json()
       if (data.found && data.syncedLyrics) {
         const parsed = parseLRC(data.syncedLyrics)
@@ -256,7 +265,7 @@ export default function App() {
 
       const formData = new FormData()
       formData.append('audio', blob, 'chunk.webm')
-      const res = await fetch(`${BACKEND}/recognize`, { method: 'POST', body: formData })
+      const res = await fetch(`${BACKEND}/recognize`, { method: 'POST', body: formData, headers: authHeaders() })
       if (!res.ok) throw new Error(`Backend error: ${res.status}`)
       const data = await res.json()
       const responseTime = Date.now()
@@ -578,7 +587,7 @@ export default function App() {
     try {
       const res = await fetch(`${BACKEND}/translate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ text: textToTranslate, targetLang: 'it' })
       })
       const data = await res.json()
@@ -610,6 +619,64 @@ export default function App() {
   }[status]
 
   const isActive = status !== 'idle'
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoginLoading(true)
+    setLoginError('')
+    try {
+      const res = await fetch(`${BACKEND}/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: loginPassword })
+      })
+      const data = await res.json()
+      if (data.ok) {
+        localStorage.setItem('lyricsync_token', loginPassword)
+        setAuthenticated(true)
+      } else {
+        setLoginError('Password errata')
+      }
+    } catch {
+      setLoginError('Errore di connessione al server')
+    }
+    setLoginLoading(false)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('lyricsync_token')
+    setAuthenticated(false)
+    setLoginPassword('')
+    stopListening()
+  }
+
+  // ─── Schermata di login ─────────────────────────────────────────────────────
+  if (!authenticated) {
+    return (
+      <div className="app">
+        <div className="overlay" />
+        <div className="login-screen">
+          <div className="login-icon">♫</div>
+          <h1 className="login-title">LyricSync</h1>
+          <p className="login-subtitle">Inserisci la password per accedere</p>
+          <form onSubmit={handleLogin} className="login-form">
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={e => setLoginPassword(e.target.value)}
+              placeholder="Password"
+              className="login-input"
+              autoFocus
+            />
+            <button type="submit" className="login-btn" disabled={loginLoading || !loginPassword}>
+              {loginLoading ? '...' : 'Accedi'}
+            </button>
+          </form>
+          {loginError && <p className="login-error">{loginError}</p>}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app">
