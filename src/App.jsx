@@ -1082,10 +1082,10 @@ export default function App() {
               <span className="discogs-rating">{'★'.repeat(discogsInfo.rating)}{'☆'.repeat(5 - discogsInfo.rating)}</span>
             )}
           </a>
-          {discogsInfo.notes && discogsInfo.notes.length > 0 && discogsInfo.notes.some(n => n.value) && (
+          {discogsInfo.notes && discogsInfo.notes.length > 0 && (
             <div className="discogs-notes">
-              {discogsInfo.notes.filter(n => n.value).map((n, i) => (
-                <span key={i} className="discogs-note">{n.value}</span>
+              {discogsInfo.notes.map((n, i) => (
+                <span key={i} className="discogs-note"><strong>{n.fieldName}:</strong> {n.value}</span>
               ))}
             </div>
           )}
