@@ -54,6 +54,42 @@ function getFromCache(shazamKey) {
   } catch { return null }
 }
 
+// Estrae colore dominante da un'immagine (via canvas ridotto)
+function extractDominantColor(imageUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      // Riduce a 10x10 per media colori (evita outlier di 1x1)
+      canvas.width = 10
+      canvas.height = 10
+      ctx.drawImage(img, 0, 0, 10, 10)
+      const data = ctx.getImageData(0, 0, 10, 10).data
+      let r = 0, g = 0, b = 0, count = 0
+      for (let i = 0; i < data.length; i += 4) {
+        // Ignora pixel troppo scuri o troppo chiari
+        const brightness = (data[i] + data[i+1] + data[i+2]) / 3
+        if (brightness > 30 && brightness < 220) {
+          r += data[i]; g += data[i+1]; b += data[i+2]; count++
+        }
+      }
+      if (count === 0) { resolve(null); return }
+      r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count)
+      // Aumenta saturazione per renderlo più vivace
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      const boost = 1.4
+      r = Math.min(255, Math.round(r + (r - (r+g+b)/3) * boost))
+      g = Math.min(255, Math.round(g + (g - (r+g+b)/3) * boost))
+      b = Math.min(255, Math.round(b + (b - (r+g+b)/3) * boost))
+      resolve(`${r}, ${g}, ${b}`)
+    }
+    img.onerror = () => resolve(null)
+    img.src = imageUrl
+  })
+}
+
 function parseLRC(lrc) {
   if (!lrc) return []
   return lrc.split('\n').map(line => {
@@ -113,6 +149,7 @@ export default function App() {
   const [transLang, setTransLang] = useState(prefs.transLang || 'it')
   const [elapsed, setElapsed] = useState(0)
   const [estimatedDuration, setEstimatedDuration] = useState(0)
+  const [dynamicColor, setDynamicColor] = useState(null)
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -152,6 +189,24 @@ export default function App() {
       container.scrollBy({ top: elTop - containerTop - targetOffset, behavior: 'smooth' })
     }
   }, [currentLine])
+
+  // Estrai colore dominante dalla cover quando cambia canzone
+  useEffect(() => {
+    if (song?.cover) {
+      extractDominantColor(song.cover).then(color => {
+        if (color) {
+          setDynamicColor(color)
+          document.documentElement.style.setProperty('--accent', `rgb(${color})`)
+          document.documentElement.style.setProperty('--accent-glow', `rgba(${color}, 0.9)`)
+        }
+      })
+    } else {
+      // Reset al colore default
+      setDynamicColor(null)
+      document.documentElement.style.setProperty('--accent', '#e8c97e')
+      document.documentElement.style.setProperty('--accent-glow', '#f0d180')
+    }
+  }, [song?.shazamKey])
 
   const startLyricsTick = useCallback((parsedLyrics, startTime) => {
     if (lyricsTimerRef.current) clearInterval(lyricsTimerRef.current)
@@ -265,7 +320,8 @@ export default function App() {
     if (force) console.log('⚡ Riconoscimento forzato (skip/voice)')
 
     isRecognizingRef.current = true
-    setStatus('recognizing')
+    // Non cambiare status a 'recognizing' se c'è già una canzone in riproduzione (evita flicker della barra)
+    if (!currentSongKeyRef.current) setStatus('recognizing')
     lastRecognizeRef.current = Date.now()
     const recordStartTime = Date.now()
 
@@ -931,7 +987,7 @@ export default function App() {
       </header>
 
       {/* Progress bar sotto l'header */}
-      {estimatedDuration > 0 && status === 'playing' && (
+      {estimatedDuration > 0 && song && status !== 'idle' && (
         <div className="song-progress-container">
           <span className="song-time">{formatTime(elapsed)}</span>
           <div className="progress-bar">
