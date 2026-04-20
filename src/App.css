@@ -718,6 +718,76 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 }
 .settings-key-input:focus { border-color: var(--accent); }
 .settings-key-input::placeholder { color: var(--text-dim); font-family: 'DM Sans', sans-serif; }
+/* ─── Discogs bar ───────────────────────────────────────────────────────── */
+.discogs-bar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 28px;
+  background: rgba(255,255,255,0.04);
+  border-top: 1px solid rgba(232,201,126,0.06);
+  border-bottom: 1px solid rgba(232,201,126,0.06);
+  text-decoration: none;
+  transition: background 0.25s ease;
+  overflow: hidden;
+}
+.discogs-bar:hover {
+  background: rgba(232,201,126,0.08);
+}
+.discogs-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+.discogs-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-mid);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.discogs-details span {
+  white-space: nowrap;
+}
+.discogs-details span + span::before {
+  content: '·';
+  margin-right: 8px;
+  color: var(--text-dim);
+}
+.discogs-catno {
+  font-family: monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+/* ─── Discogs settings ──────────────────────────────────────────────────── */
+.settings-discogs-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.discogs-connected {
+  font-size: 0.85rem;
+  color: var(--text-mid);
+}
+.discogs-connected strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+.settings-discogs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .settings-logout { padding: 24px; }
 .settings-btn-danger {
   width: 100%; padding: 12px; border-radius: var(--radius);

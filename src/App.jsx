@@ -150,6 +150,10 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0)
   const [estimatedDuration, setEstimatedDuration] = useState(0)
   const [dynamicColor, setDynamicColor] = useState(null)
+  const [discogsInfo, setDiscogsInfo] = useState(null)
+  const [discogsLoading, setDiscogsLoading] = useState(false)
+  const [discogsConfig, setDiscogsConfig] = useState({ configured: false, username: '' })
+  const [discogsForm, setDiscogsForm] = useState({ username: '', consumerKey: '', consumerSecret: '' })
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -206,6 +210,21 @@ export default function App() {
       document.documentElement.style.setProperty('--accent', '#e8c97e')
       document.documentElement.style.setProperty('--accent-glow', '#f0d180')
     }
+  }, [song?.shazamKey])
+
+  // Cerca info Discogs quando cambia canzone
+  useEffect(() => {
+    if (!song?.artist) { setDiscogsInfo(null); return }
+    let cancelled = false
+    setDiscogsLoading(true)
+    const params = new URLSearchParams({ artist: song.artist, title: song.title })
+    if (song.album) params.append('album', song.album)
+    fetch(`${BACKEND}/discogs/search?${params}`, { headers: authHeaders() })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setDiscogsInfo(data.found ? data : null) })
+      .catch(() => { if (!cancelled) setDiscogsInfo(null) })
+      .finally(() => { if (!cancelled) setDiscogsLoading(false) })
+    return () => { cancelled = true }
   }, [song?.shazamKey])
 
   const startLyricsTick = useCallback((parsedLyrics, startTime) => {
@@ -729,9 +748,19 @@ export default function App() {
     setKeysLoading(false)
   }
 
-  // Carica chiavi quando si apre il pannello impostazioni
+  // Carica chiavi e config Discogs quando si apre il pannello impostazioni
   useEffect(() => {
-    if (showSettings && authenticated) fetchApiKeys()
+    if (showSettings && authenticated) {
+      fetchApiKeys()
+      // Carica config Discogs
+      fetch(`${BACKEND}/discogs/config`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(data => {
+          setDiscogsConfig(data)
+          if (data.username) setDiscogsForm(f => ({ ...f, username: data.username }))
+        })
+        .catch(() => {})
+    }
   }, [showSettings, authenticated, fetchApiKeys])
 
   const handleLogin = async (e) => {
@@ -918,6 +947,47 @@ export default function App() {
           </div>
 
           <div className="settings-group">
+            <label className="settings-label">Discogs</label>
+            {discogsConfig.configured ? (
+              <div className="settings-discogs-status">
+                <span className="discogs-connected">Collegato come <strong>{discogsConfig.username}</strong></span>
+                <button className="settings-btn-small" onClick={async () => {
+                  try {
+                    await fetch(`${BACKEND}/discogs/config`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ username: '', consumerKey: '', consumerSecret: '' }) })
+                    setDiscogsConfig({ configured: false, username: '' })
+                    setDiscogsForm({ username: '', consumerKey: '', consumerSecret: '' })
+                  } catch {}
+                }}>Disconnetti</button>
+              </div>
+            ) : (
+              <div className="settings-discogs-form">
+                <input type="text" value={discogsForm.username} onChange={e => setDiscogsForm(f => ({ ...f, username: e.target.value }))}
+                  placeholder="Username Discogs" className="settings-key-input" />
+                <input type="text" value={discogsForm.consumerKey} onChange={e => setDiscogsForm(f => ({ ...f, consumerKey: e.target.value }))}
+                  placeholder="Consumer Key" className="settings-key-input" />
+                <input type="password" value={discogsForm.consumerSecret} onChange={e => setDiscogsForm(f => ({ ...f, consumerSecret: e.target.value }))}
+                  placeholder="Consumer Secret" className="settings-key-input" />
+                <button className="settings-btn-small" disabled={!discogsForm.username || !discogsForm.consumerKey || !discogsForm.consumerSecret}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${BACKEND}/discogs/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                        body: JSON.stringify(discogsForm)
+                      })
+                      if (res.ok) {
+                        setDiscogsConfig({ configured: true, username: discogsForm.username })
+                      } else {
+                        const data = await res.json()
+                        alert(data.error || 'Errore')
+                      }
+                    } catch { alert('Errore di connessione') }
+                  }}>Collega Discogs</button>
+              </div>
+            )}
+          </div>
+
+          <div className="settings-group">
             <label className="settings-label">Cache locale</label>
             <div className="settings-row">
               <span className="settings-value">{Object.keys(getCache()).length} canzoni</span>
@@ -995,6 +1065,20 @@ export default function App() {
           </div>
           <span className="song-time">~{formatTime(estimatedDuration)}</span>
         </div>
+      )}
+
+      {/* Info Discogs */}
+      {discogsInfo && (
+        <a href={discogsInfo.discogsUrl} target="_blank" rel="noopener noreferrer" className="discogs-bar">
+          <span className="discogs-badge">{discogsInfo.inCollection ? '💿 In collezione' : '💿 Discogs'}</span>
+          <span className="discogs-details">
+            {discogsInfo.label && <span>{discogsInfo.label}</span>}
+            {discogsInfo.year && <span>{discogsInfo.year}</span>}
+            {discogsInfo.format && <span>{discogsInfo.format}</span>}
+            {discogsInfo.country && <span>{discogsInfo.country}</span>}
+            {discogsInfo.catno && <span className="discogs-catno">{discogsInfo.catno}</span>}
+          </span>
+        </a>
       )}
 
       {/* Area testi */}
