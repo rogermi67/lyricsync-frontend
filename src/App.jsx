@@ -5,10 +5,10 @@ const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
 const INTERVAL_SEARCHING = 20000
 const INTERVAL_SEARCHING_FAST = 10000
 const FALLBACK_TIMEOUT = 360000
-const MIN_RECOGNIZE_GAP = 12000  // minimo 12s tra una chiamata API e la successiva
+const MIN_RECOGNIZE_GAP = 30000  // minimo 30s tra una chiamata API e la successiva
 const LYRICS_TICK = 250
 const SILENCE_THRESHOLD = 0.01
-const SILENCE_DURATION = 5000
+const SILENCE_DURATION = 8000
 const MIN_PLAY_TIME = 15000
 const MAX_CONSECUTIVE_FAILS = 3
 const FAIL_BACKOFF = 30000
@@ -379,11 +379,13 @@ export default function App() {
           silenceReadyRef.current = false
           silenceActiveRef.current = false
           setStatus('playing')
+          // Cooldown lungo (60s) prima di ri-attivare silence detection — evita loop di riconoscimenti
           setTimeout(() => {
             if (currentSongKeyRef.current === data.shazamKey) {
               silenceReadyRef.current = true
+              console.log('🔇 Silence detection ri-attivata (dopo same-song cooldown 60s)')
             }
-          }, MIN_PLAY_TIME)
+          }, 60000)
         } else {
           // NUOVA canzone davvero
           const totalDelay = (responseTime - recordStartTime) / 1000
