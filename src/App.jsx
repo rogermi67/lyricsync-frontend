@@ -224,7 +224,23 @@ export default function App() {
     if (song.album) params.append('album', song.album)
     fetch(`${BACKEND}/discogs/search?${params}`, { headers: authHeaders() })
       .then(r => r.json())
-      .then(data => { if (!cancelled) setDiscogsInfo(data.found ? data : null) })
+      .then(data => {
+        if (cancelled) return
+        if (data.found) {
+          setDiscogsInfo(data)
+          // Se in collezione, sovrascrivi i metadati Shazam con quelli del vinile originale
+          if (data.inCollection) {
+            setSong(prev => prev ? {
+              ...prev,
+              album: data.title || prev.album,  // titolo release Discogs (es. nome album originale)
+              year: data.year || prev.year,
+              cover: data.cover || prev.cover,
+            } : prev)
+          }
+        } else {
+          setDiscogsInfo(null)
+        }
+      })
       .catch(() => { if (!cancelled) setDiscogsInfo(null) })
       .finally(() => { if (!cancelled) setDiscogsLoading(false) })
     return () => { cancelled = true }
