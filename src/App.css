@@ -686,6 +686,30 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   cursor: pointer; transition: all 0.2s;
 }
 .settings-btn-small:hover { background: rgba(232,201,126,0.1); color: var(--accent); }
+.settings-btn-small:disabled { opacity: 0.4; cursor: not-allowed; }
+.settings-key-source {
+  font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(232,201,126,0.08); color: var(--text-dim);
+}
+.settings-key-remove {
+  background: none; border: 1px solid rgba(255,100,100,0.25); color: #ff9090;
+  font-size: 0.7rem; cursor: pointer; padding: 2px 7px; border-radius: 6px;
+  transition: all 0.2s;
+}
+.settings-key-remove:hover { background: rgba(255,100,100,0.15); }
+.settings-key-remove:disabled { opacity: 0.3; cursor: not-allowed; }
+.settings-add-key {
+  display: flex; gap: 8px; margin-top: 12px; align-items: center;
+}
+.settings-key-input {
+  flex: 1; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgba(232,201,126,0.15);
+  background: rgba(255,255,255,0.04); color: var(--text);
+  font-family: monospace; font-size: 0.75rem; outline: none;
+}
+.settings-key-input:focus { border-color: var(--accent); }
+.settings-key-input::placeholder { color: var(--text-dim); font-family: 'DM Sans', sans-serif; }
 .settings-logout { padding: 24px; }
 .settings-btn-danger {
   width: 100%; padding: 12px; border-radius: var(--radius);

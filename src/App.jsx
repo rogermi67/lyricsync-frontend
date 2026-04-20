@@ -98,6 +98,9 @@ export default function App() {
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [apiKeys, setApiKeys] = useState([])
+  const [newApiKey, setNewApiKey] = useState('')
+  const [keysLoading, setKeysLoading] = useState(false)
   const [fontSize, setFontSize] = useState(prefs.fontSize || DEFAULT_FONT)
   const [translatedLyrics, setTranslatedLyrics] = useState({})
   const [showTranslation, setShowTranslation] = useState(false)
@@ -634,6 +637,46 @@ export default function App() {
 
   const isActive = status !== 'idle'
 
+  const fetchApiKeys = useCallback(async () => {
+    try {
+      const res = await fetch(`${BACKEND}/keys`, { headers: authHeaders() })
+      if (res.ok) setApiKeys((await res.json()).keys || [])
+    } catch {}
+  }, [])
+
+  const addApiKey = async () => {
+    if (!newApiKey.trim() || keysLoading) return
+    setKeysLoading(true)
+    try {
+      const res = await fetch(`${BACKEND}/keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ key: newApiKey.trim() })
+      })
+      const data = await res.json()
+      if (res.ok) { setNewApiKey(''); await fetchApiKeys(); fetchCounter() }
+      else alert(data.error || 'Errore')
+    } catch { alert('Errore di connessione') }
+    setKeysLoading(false)
+  }
+
+  const removeApiKey = async (index) => {
+    if (keysLoading) return
+    setKeysLoading(true)
+    try {
+      const res = await fetch(`${BACKEND}/keys/${index}`, { method: 'DELETE', headers: authHeaders() })
+      const data = await res.json()
+      if (res.ok) { await fetchApiKeys(); fetchCounter() }
+      else alert(data.error || 'Errore')
+    } catch { alert('Errore di connessione') }
+    setKeysLoading(false)
+  }
+
+  // Carica chiavi quando si apre il pannello impostazioni
+  useEffect(() => {
+    if (showSettings && authenticated) fetchApiKeys()
+  }, [showSettings, authenticated, fetchApiKeys])
+
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoginLoading(true)
@@ -783,18 +826,27 @@ export default function App() {
           </div>
 
           <div className="settings-group">
-            <label className="settings-label">Chiamate API</label>
-            <div className="settings-row">
-              <span className="settings-value">{counter.used} usate / {counter.total} totali</span>
-            </div>
-            {counter.keys && counter.keys.map((k, i) => (
+            <label className="settings-label">Chiavi API Shazam ({apiKeys.length})</label>
+            {apiKeys.map((k, i) => (
               <div key={i} className="settings-key-row">
-                <span className="settings-key-name">{k.key}</span>
+                <span className="settings-key-name">{k.prefix}</span>
+                <span className="settings-key-source">{k.source}</span>
                 <span className={`settings-key-status ${k.exhausted ? 'exhausted' : ''}`}>
-                  {k.exhausted ? 'esaurita' : `${k.remaining} rimaste`}
+                  {k.exhausted ? 'esaurita' : `${k.remaining}`}
                 </span>
+                {k.source === 'redis' && (
+                  <button className="settings-key-remove" onClick={() => removeApiKey(k.index)} disabled={keysLoading}>✕</button>
+                )}
               </div>
             ))}
+            <div className="settings-add-key">
+              <input type="text" value={newApiKey} onChange={e => setNewApiKey(e.target.value)}
+                placeholder="Incolla nuova chiave RapidAPI" className="settings-key-input"
+                onKeyDown={e => e.key === 'Enter' && addApiKey()} />
+              <button className="settings-btn-small" onClick={addApiKey} disabled={keysLoading || !newApiKey.trim()}>
+                {keysLoading ? '...' : '+ Aggiungi'}
+              </button>
+            </div>
           </div>
 
           <div className="settings-group">
