@@ -70,11 +70,22 @@ function parseLRC(lrc) {
 function getAuthToken() { return localStorage.getItem('lyricsync_token') || '' }
 function authHeaders() { return { 'X-App-Token': getAuthToken() } }
 
+// ─── Preferenze persistenti ─────────────────────────────────────────────────
+const PREFS_KEY = 'lyricsync_prefs'
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') } catch { return {} }
+}
+function savePrefs(prefs) {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+}
+
 export default function App() {
   const [authenticated, setAuthenticated] = useState(!!localStorage.getItem('lyricsync_token'))
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+
+  const prefs = loadPrefs()
 
   const [status, setStatus] = useState('idle')
   const [song, setSong] = useState(null)
@@ -86,13 +97,16 @@ export default function App() {
   const [voiceReady, setVoiceReady] = useState(false)
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
-  const [fontSize, setFontSize] = useState(DEFAULT_FONT)
+  const [showSettings, setShowSettings] = useState(false)
+  const [fontSize, setFontSize] = useState(prefs.fontSize || DEFAULT_FONT)
   const [translatedLyrics, setTranslatedLyrics] = useState({})
   const [showTranslation, setShowTranslation] = useState(false)
   const [translating, setTranslating] = useState(false)
-  const [karaokeMode, setKaraokeMode] = useState(false)
+  const [karaokeMode, setKaraokeMode] = useState(prefs.karaokeMode || false)
   const [karaokeProgress, setKaraokeProgress] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [autoTranslate, setAutoTranslate] = useState(prefs.autoTranslate || false)
+  const [transLang, setTransLang] = useState(prefs.transLang || 'it')
   const [elapsed, setElapsed] = useState(0)
   const [estimatedDuration, setEstimatedDuration] = useState(0)
 
@@ -588,7 +602,7 @@ export default function App() {
       const res = await fetch(`${BACKEND}/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ text: textToTranslate, targetLang: 'it' })
+        body: JSON.stringify({ text: textToTranslate, targetLang: transLang })
       })
       const data = await res.json()
       if (data.translated) {
@@ -602,7 +616,7 @@ export default function App() {
       console.error('❌ translateLyrics:', err)
     }
     setTranslating(false)
-  }, [translating, showTranslation, translatedLyrics, lyrics, plainLyrics, song])
+  }, [translating, showTranslation, translatedLyrics, lyrics, plainLyrics, song, transLang])
 
   const formatTime = (seconds) => {
     if (!seconds || seconds < 0) return '0:00'
@@ -715,6 +729,88 @@ export default function App() {
         </div>
       )}
 
+      {/* Pannello impostazioni */}
+      {showSettings && (
+        <div className="settings-panel">
+          <div className="settings-header">
+            <span>Impostazioni</span>
+            <button className="history-close" onClick={() => setShowSettings(false)}>✕</button>
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Dimensione testo</label>
+            <div className="settings-row">
+              <input type="range" min={MIN_FONT} max={MAX_FONT} value={fontSize}
+                onChange={e => { const v = Number(e.target.value); setFontSize(v); savePrefs({ ...loadPrefs(), fontSize: v }) }}
+                className="settings-range" />
+              <span className="settings-value">{fontSize}px</span>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Modalità karaoke</label>
+            <div className="settings-row">
+              <button className={`settings-toggle ${karaokeMode ? 'on' : ''}`}
+                onClick={() => { const v = !karaokeMode; setKaraokeMode(v); savePrefs({ ...loadPrefs(), karaokeMode: v }) }}>
+                {karaokeMode ? 'ON' : 'OFF'}
+              </button>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Traduzione automatica</label>
+            <div className="settings-row">
+              <button className={`settings-toggle ${autoTranslate ? 'on' : ''}`}
+                onClick={() => { const v = !autoTranslate; setAutoTranslate(v); savePrefs({ ...loadPrefs(), autoTranslate: v }) }}>
+                {autoTranslate ? 'ON' : 'OFF'}
+              </button>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Lingua traduzione</label>
+            <div className="settings-row">
+              <select value={transLang} className="settings-select"
+                onChange={e => { const v = e.target.value; setTransLang(v); savePrefs({ ...loadPrefs(), transLang: v }) }}>
+                <option value="it">Italiano</option>
+                <option value="es">Español</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="pt">Português</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Chiamate API</label>
+            <div className="settings-row">
+              <span className="settings-value">{counter.used} usate / {counter.total} totali</span>
+            </div>
+            {counter.keys && counter.keys.map((k, i) => (
+              <div key={i} className="settings-key-row">
+                <span className="settings-key-name">{k.key}</span>
+                <span className={`settings-key-status ${k.exhausted ? 'exhausted' : ''}`}>
+                  {k.exhausted ? 'esaurita' : `${k.remaining} rimaste`}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="settings-group">
+            <label className="settings-label">Cache locale</label>
+            <div className="settings-row">
+              <span className="settings-value">{Object.keys(getCache()).length} canzoni</span>
+              <button className="settings-btn-small" onClick={() => { localStorage.removeItem(CACHE_KEY); alert('Cache svuotata') }}>Svuota</button>
+            </div>
+          </div>
+
+          <div className="settings-group settings-logout">
+            <button className="settings-btn-danger" onClick={handleLogout}>Esci (Logout)</button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="song-header">
         {/* Cover grande */}
@@ -766,6 +862,7 @@ export default function App() {
           <button className="icon-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'} aria-label="Toggle fullscreen">
             {isFullscreen ? '⊡' : '⛶'}
           </button>
+          <button className="icon-btn" onClick={() => setShowSettings(s => !s)} title="Impostazioni" aria-label="Settings">⚙</button>
         </div>
       </header>
 
@@ -856,7 +953,7 @@ export default function App() {
               <button className={`font-btn translate-btn ${showTranslation ? 'active' : ''}`}
                 onClick={() => showTranslation ? setShowTranslation(false) : translateLyrics()}
                 disabled={translating}>
-                {translating ? '...' : 'IT'}
+                {translating ? '...' : transLang.toUpperCase()}
               </button>
             )}
           </div>
