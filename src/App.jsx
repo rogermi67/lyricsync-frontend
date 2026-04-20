@@ -2,9 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
-const INTERVAL_SEARCHING = 15000
-const INTERVAL_SEARCHING_FAST = 8000
+const INTERVAL_SEARCHING = 20000
+const INTERVAL_SEARCHING_FAST = 10000
 const FALLBACK_TIMEOUT = 360000
+const MIN_RECOGNIZE_GAP = 12000  // minimo 12s tra una chiamata API e la successiva
 const LYRICS_TICK = 250
 const SILENCE_THRESHOLD = 0.01
 const SILENCE_DURATION = 5000
@@ -103,6 +104,7 @@ export default function App() {
   const autoNextTimerRef = useRef(null)
   const anchorTimeRef = useRef(null)
   const recognizeRef = useRef(null)
+  const lastRecognizeRef = useRef(0)  // timestamp ultima chiamata API
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
   const wakeLockRef = useRef(null)
@@ -223,10 +225,21 @@ export default function App() {
 
   const recognize = useCallback(async (stream, force = false) => {
     if (!isListeningRef.current || isRecognizingRef.current) return
+
+    // Cooldown: impedisce chiamate troppo ravvicinate (min 12s tra una e l'altra)
+    const timeSinceLast = Date.now() - lastRecognizeRef.current
+    if (!force && timeSinceLast < MIN_RECOGNIZE_GAP) {
+      const wait = MIN_RECOGNIZE_GAP - timeSinceLast
+      console.log(`⏳ Cooldown: aspetto ${Math.round(wait/1000)}s prima della prossima chiamata`)
+      recognizeTimerRef.current = setTimeout(() => recognize(stream), wait)
+      return
+    }
+
     if (force) console.log('⚡ Riconoscimento forzato (skip/voice)')
 
     isRecognizingRef.current = true
     setStatus('recognizing')
+    lastRecognizeRef.current = Date.now()
     const recordStartTime = Date.now()
 
     try {
@@ -251,18 +264,14 @@ export default function App() {
 
       if (data.found) {
         consecutiveFailsRef.current = 0
-        // Controlla se è la stessa canzone (anche dopo reset da silence detection)
         const isCurrentSong = data.shazamKey === currentSongKeyRef.current
         const isSameAsPrevious = data.shazamKey === previousSongKeyRef.current
         const recentlyFound = songFoundTimeRef.current && (Date.now() - songFoundTimeRef.current) < FALLBACK_TIMEOUT
 
         if (isCurrentSong) {
-          // Stessa canzone in corso — non fare nulla
           console.log('🔄 Stessa canzone, nessuna azione')
           setStatus('playing')
         } else if (isSameAsPrevious && recentlyFound) {
-          // Silence detection ha triggerato ma è sempre la stessa canzone
-          // Ripristina lo stato senza ri-caricare testi
           console.log('🔄 Stessa canzone dopo pausa — ripristino senza sprecare chiamate')
           currentSongKeyRef.current = data.shazamKey
           silenceReadyRef.current = false
@@ -288,7 +297,6 @@ export default function App() {
           setElapsed(0)
           setEstimatedDuration(0)
 
-          // Salva metadata canzone in cache (i testi verranno aggiunti da fetchLyrics)
           saveToCache(data.shazamKey, data, null, null)
 
           setSong(data)
@@ -300,7 +308,6 @@ export default function App() {
           if (lyricsTimerRef.current) clearInterval(lyricsTimerRef.current)
           setStatus('playing')
 
-          // Aggiunge alla cronologia
           setHistory(prev => {
             const already = prev.find(s => s.shazamKey === data.shazamKey)
             if (already) return prev
@@ -317,6 +324,7 @@ export default function App() {
           await fetchLyrics(data.title, data.artist, data.album, actualOffset, responseTime, data.shazamKey)
         }
 
+        // Dopo riconoscimento riuscito: solo fallback timer, NESSUN retry automatico
         if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
         fallbackTimerRef.current = setTimeout(() => {
           console.log('⏰ Fallback 6 min — forzo nuovo riconoscimento')
@@ -329,6 +337,15 @@ export default function App() {
 
       } else {
         consecutiveFailsRef.current += 1
+
+        // Se una canzone è già in riproduzione, NON ritentare — aspetta auto-next o silenzio
+        if (currentSongKeyRef.current) {
+          console.log('🔍 Non trovata, ma canzone in corso — aspetto auto-next/silenzio')
+          setStatus('playing')
+          isRecognizingRef.current = false
+          return
+        }
+
         const delay = consecutiveFailsRef.current >= MAX_CONSECUTIVE_FAILS
           ? FAIL_BACKOFF
           : INTERVAL_SEARCHING
@@ -343,6 +360,14 @@ export default function App() {
     } catch (err) {
       consecutiveFailsRef.current += 1
       console.error('❌ recognize:', err.message)
+
+      // Come sopra: se canzone in corso, non ritentare
+      if (currentSongKeyRef.current) {
+        setStatus('playing')
+        isRecognizingRef.current = false
+        return
+      }
+
       setStatus('listening')
       recognizeTimerRef.current = setTimeout(() => {
         isRecognizingRef.current = false
@@ -391,6 +416,7 @@ export default function App() {
           console.log(`🎵 Audio ripreso (RMS: ${rms.toFixed(4)}) — riconosco nuova canzone...`)
           silenceActiveRef.current = false
           silenceStart = null
+          currentSongKeyRef.current = null  // reset qui, quando l'audio riprende davvero
           isRecognizingRef.current = false
           recognize(stream, true)
         }
@@ -406,9 +432,11 @@ export default function App() {
           console.log(`🔇 Silenzio confermato dopo ${SILENCE_DURATION}ms — pronto per prossima canzone`)
           silenceActiveRef.current = true
           silenceReadyRef.current = false
-          currentSongKeyRef.current = null
+          // NON resettare currentSongKeyRef qui — lo faremo solo quando l'audio riprende
+          // Così se è un falso positivo (passaggio tranquillo), la canzone non viene "dimenticata"
           if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
           if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
+          if (autoNextTimerRef.current) clearTimeout(autoNextTimerRef.current)
           setStatus('listening')
         }
       } else {
