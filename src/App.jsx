@@ -15,6 +15,44 @@ const MIN_FONT = 12
 const MAX_FONT = 32
 const DEFAULT_FONT = 20
 
+// ─── Cache localStorage ────────────────────────────────────────────────────
+const CACHE_KEY = 'lyricsync_cache'
+const CACHE_MAX = 200 // massimo canzoni in cache
+
+function getCache() {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')
+  } catch { return {} }
+}
+
+function saveToCache(shazamKey, songData, syncedLyrics, plainLyrics) {
+  try {
+    const cache = getCache()
+    const existing = cache[shazamKey] || {}
+    cache[shazamKey] = {
+      song: { ...existing.song, title: songData.title, artist: songData.artist, album: songData.album, year: songData.year, cover: songData.cover, artistImage: songData.artistImage, shazamKey: songData.shazamKey },
+      syncedLyrics: syncedLyrics || existing.syncedLyrics || null,
+      plainLyrics: plainLyrics || existing.plainLyrics || null,
+      ts: Date.now()
+    }
+    // Limita dimensione cache: rimuovi le più vecchie
+    const keys = Object.keys(cache)
+    if (keys.length > CACHE_MAX) {
+      keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0))
+      for (let i = 0; i < keys.length - CACHE_MAX; i++) delete cache[keys[i]]
+    }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+    console.log(`💾 Cache: salvata "${songData.title}" (${keys.length} canzoni in cache)`)
+  } catch (e) { console.warn('Cache write error:', e) }
+}
+
+function getFromCache(shazamKey) {
+  try {
+    const cache = getCache()
+    return cache[shazamKey] || null
+  } catch { return null }
+}
+
 function parseLRC(lrc) {
   if (!lrc) return []
   return lrc.split('\n').map(line => {
@@ -44,6 +82,7 @@ export default function App() {
   const [translating, setTranslating] = useState(false)
   const [karaokeMode, setKaraokeMode] = useState(false)
   const [karaokeProgress, setKaraokeProgress] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [estimatedDuration, setEstimatedDuration] = useState(0)
 
@@ -66,6 +105,7 @@ export default function App() {
   const recognizeRef = useRef(null)
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
+  const wakeLockRef = useRef(null)
 
   const fetchCounter = useCallback(async () => {
     try { const res = await fetch(`${BACKEND}/counter`); setCounter(await res.json()) } catch {}
@@ -131,8 +171,28 @@ export default function App() {
     }, LYRICS_TICK)
   }, [])
 
-  const fetchLyrics = useCallback(async (title, artist, album, offset, anchorTime = Date.now()) => {
+  const fetchLyrics = useCallback(async (title, artist, album, offset, anchorTime = Date.now(), shazamKey = null) => {
     console.log(`📝 Cerco testi: "${title}" offset=${offset.toFixed(1)}s`)
+
+    // Controlla cache prima di chiamare il backend
+    if (shazamKey) {
+      const cached = getFromCache(shazamKey)
+      if (cached && (cached.syncedLyrics || cached.plainLyrics)) {
+        console.log(`💾 Cache hit: "${title}" — uso testi dalla cache`)
+        if (cached.syncedLyrics) {
+          const parsed = parseLRC(cached.syncedLyrics)
+          setLyrics(parsed)
+          setPlainLyrics('')
+          startLyricsTick(parsed, anchorTime - (offset * 1000))
+          setCurrentLine(0)
+        } else if (cached.plainLyrics) {
+          setLyrics([])
+          setPlainLyrics(cached.plainLyrics)
+        }
+        return
+      }
+    }
+
     try {
       const params = new URLSearchParams({ title, artist })
       if (album) params.append('album', album)
@@ -144,9 +204,12 @@ export default function App() {
         setPlainLyrics('')
         startLyricsTick(parsed, anchorTime - (offset * 1000))
         setCurrentLine(0)
+        // Salva in cache
+        if (shazamKey) saveToCache(shazamKey, { title, artist, album, shazamKey }, data.syncedLyrics, null)
       } else if (data.found && data.plainLyrics) {
         setLyrics([])
         setPlainLyrics(data.plainLyrics)
+        if (shazamKey) saveToCache(shazamKey, { title, artist, album, shazamKey }, null, data.plainLyrics)
       } else {
         setLyrics([])
         setPlainLyrics('')
@@ -225,6 +288,9 @@ export default function App() {
           setElapsed(0)
           setEstimatedDuration(0)
 
+          // Salva metadata canzone in cache (i testi verranno aggiunti da fetchLyrics)
+          saveToCache(data.shazamKey, data, null, null)
+
           setSong(data)
           setCurrentLine(0)
           setLyrics([])
@@ -248,7 +314,7 @@ export default function App() {
             }
           }, MIN_PLAY_TIME)
 
-          await fetchLyrics(data.title, data.artist, data.album, actualOffset, responseTime)
+          await fetchLyrics(data.title, data.artist, data.album, actualOffset, responseTime, data.shazamKey)
         }
 
         if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
@@ -397,6 +463,14 @@ export default function App() {
       streamRef.current = stream
       startSilenceDetection(stream)
       startVoiceCommand(stream)
+      // Keep screen on (Wake Lock API)
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen')
+          console.log('🔆 Wake Lock attivato — schermo sempre acceso')
+          wakeLockRef.current.addEventListener('release', () => console.log('🔆 Wake Lock rilasciato'))
+        }
+      } catch (e) { console.warn('Wake Lock non disponibile:', e) }
       setTimeout(() => recognize(stream), 500)
     } catch {
       setError('Microfono non disponibile. Controlla i permessi del browser.')
@@ -414,6 +488,8 @@ export default function App() {
     if (silenceCheckRef.current) clearInterval(silenceCheckRef.current)
     if (speechRef.current) { try { speechRef.current.stop() } catch {} }
     streamRef.current?.getTracks().forEach(t => t.stop())
+    // Rilascia Wake Lock
+    if (wakeLockRef.current) { try { wakeLockRef.current.release(); wakeLockRef.current = null } catch {} }
     currentSongKeyRef.current = null
     previousSongKeyRef.current = null
     songFoundTimeRef.current = null
@@ -424,6 +500,36 @@ export default function App() {
   }, [])
 
   useEffect(() => () => stopListening(), [stopListening])
+
+  // Re-acquire Wake Lock quando il tab torna visibile
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && isListeningRef.current && !wakeLockRef.current) {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLockRef.current = await navigator.wakeLock.request('screen')
+            console.log('🔆 Wake Lock ri-attivato')
+          }
+        } catch {}
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', handler)
+    return () => document.removeEventListener('fullscreenchange', handler)
+  }, [])
 
   const translateLyrics = useCallback(async () => {
     if (translating) return
@@ -562,6 +668,9 @@ export default function App() {
             <button className="icon-btn" onClick={forceNextSong} title="Prossima canzone" aria-label="Skip to next song">⏭</button>
           )}
           <button className="icon-btn" onClick={() => setShowHistory(h => !h)} title="Cronologia" aria-label="View history">🕒</button>
+          <button className="icon-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'} aria-label="Toggle fullscreen">
+            {isFullscreen ? '⊡' : '⛶'}
+          </button>
         </div>
       </header>
 
