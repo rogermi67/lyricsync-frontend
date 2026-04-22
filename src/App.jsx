@@ -1193,15 +1193,15 @@ export default function App() {
           <img src={song.cover} alt="album cover" className="cover-large" loading="lazy" />
         ) : (
           <div style={{
-            width: '140px',
-            height: '140px',
-            borderRadius: '8px',
+            width: '80px',
+            height: '80px',
+            borderRadius: '6px',
             background: 'linear-gradient(135deg, rgba(232,201,126,0.1) 0%, rgba(232,201,126,0.05) 100%)',
             border: '1.5px solid rgba(232,201,126,0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '3rem',
+            fontSize: '2rem',
             opacity: 0.3,
             flexShrink: 0,
           }}>♫</div>
