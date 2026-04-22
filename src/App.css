@@ -64,8 +64,8 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 
 /* Cover — posizionata in alto a destra */
 .cover-large {
-  width: 150px;
-  height: 150px;
+  width: 190px;
+  height: 190px;
   border-radius: 6px;
   object-fit: cover;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6);
@@ -84,7 +84,7 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 
 .song-meta {
   min-width: 0;
-  padding-right: 180px;
+  padding-right: 220px;
   text-align: left;
   opacity: 0;
   transform: translateY(12px);
@@ -131,7 +131,7 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   gap: 6px;
   align-items: center;
   margin-top: 8px;
-  padding-right: 180px;
+  padding-right: 220px;
 }
 
 .header-actions-sep {
