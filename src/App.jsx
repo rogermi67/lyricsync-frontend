@@ -157,6 +157,7 @@ export default function App() {
   const [discogsForm, setDiscogsForm] = useState({ username: '', consumerKey: '', consumerSecret: '' })
   const [discogsFields, setDiscogsFields] = useState({})
   const [discogsFieldsForm, setDiscogsFieldsForm] = useState({})
+  const [showTracklist, setShowTracklist] = useState(false)
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -610,27 +611,56 @@ export default function App() {
 
   const startVoiceCommand = useCallback((stream) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SR) return
+    if (!SR) { console.warn('🎤 SpeechRecognition non supportato'); return }
     const speech = new SR()
     speech.lang = 'it-IT'
     speech.continuous = true
-    speech.interimResults = false
+    speech.interimResults = true
+    speech.maxAlternatives = 3
     speech.onresult = (event) => {
-      const t = event.results[event.results.length - 1][0].transcript.toLowerCase().trim()
-      if (t.includes('aggiorna') || t.includes('prossima') || t.includes('next')) {
-        console.log('🎤 Comando vocale!')
-        currentSongKeyRef.current = null
-        silenceReadyRef.current = false
-        if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
-        if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
-        isRecognizingRef.current = false
-        silenceActiveRef.current = false
-        recognize(stream, true)
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript.toLowerCase().trim()
+        const confidence = event.results[i][0].confidence
+        console.log(`🎤 Riconosciuto: "${t}" (conf: ${(confidence * 100).toFixed(0)}%, finale: ${event.results[i].isFinal})`)
+        if (event.results[i].isFinal && (t.includes('aggiorna') || t.includes('prossima') || t.includes('avanti') || t.includes('next'))) {
+          console.log('🎤 Comando vocale riconosciuto! Azione: skip')
+          currentSongKeyRef.current = null
+          silenceReadyRef.current = false
+          if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current)
+          if (recognizeTimerRef.current) clearTimeout(recognizeTimerRef.current)
+          isRecognizingRef.current = false
+          silenceActiveRef.current = false
+          recognize(stream, true)
+        }
       }
     }
-    speech.onerror = () => {}
-    speech.onend = () => { if (isListeningRef.current) { try { speech.start() } catch {} } }
-    try { speech.start(); speechRef.current = speech; setVoiceReady(true) } catch {}
+    speech.onerror = (e) => {
+      console.warn(`🎤 Errore SpeechRecognition: ${e.error} (message: ${e.message || 'n/a'})`)
+      // 'no-speech' è normale in ambiente rumoroso, riprova
+      if (e.error === 'no-speech' || e.error === 'aborted') return
+      // 'not-allowed' = microfono non autorizzato
+      if (e.error === 'not-allowed') {
+        console.error('🎤 Microfono non autorizzato per SpeechRecognition')
+        setVoiceReady(false)
+        return
+      }
+    }
+    speech.onend = () => {
+      console.log('🎤 SpeechRecognition terminato, riavvio...')
+      if (isListeningRef.current) {
+        setTimeout(() => {
+          try { speech.start() } catch (e) { console.warn('🎤 Riavvio fallito:', e.message) }
+        }, 500)
+      }
+    }
+    try {
+      speech.start()
+      speechRef.current = speech
+      setVoiceReady(true)
+      console.log('🎤 SpeechRecognition avviato (lang: it-IT, continuous, interimResults)')
+    } catch (e) {
+      console.error('🎤 Avvio SpeechRecognition fallito:', e.message)
+    }
   }, [recognize])
 
   const forceNextSong = useCallback(() => {
@@ -933,6 +963,37 @@ export default function App() {
         </div>
       )}
 
+      {/* Pannello tracklist */}
+      {showTracklist && discogsInfo?.tracklist?.length > 0 && (
+        <div className="tracklist-panel">
+          <div className="history-header">
+            <span>Tracklist</span>
+            <button className="history-close" onClick={() => setShowTracklist(false)}>✕</button>
+          </div>
+          <div className="tracklist-album-info">
+            {discogsInfo.cover && <img src={discogsInfo.cover} alt="" className="tracklist-album-cover" />}
+            <div className="tracklist-album-meta">
+              <span className="tracklist-album-title">{discogsInfo.title || song?.album}</span>
+              <span className="tracklist-album-artist">{song?.artist}</span>
+              {discogsInfo.year && <span className="tracklist-album-year">{discogsInfo.year}</span>}
+            </div>
+          </div>
+          <div className="tracklist-list">
+            {discogsInfo.tracklist.map((track, i) => {
+              const isCurrentTrack = song && track.title && song.title &&
+                track.title.toLowerCase().replace(/[^a-z0-9]/g, '').includes(song.title.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 10))
+              return (
+                <div key={i} className={`tracklist-item ${isCurrentTrack ? 'current' : ''}`}>
+                  <span className="tracklist-pos">{track.position}</span>
+                  <span className="tracklist-title">{track.title}</span>
+                  {track.duration && <span className="tracklist-duration">{track.duration}</span>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Pannello impostazioni */}
       {showSettings && (
         <div className="settings-panel">
@@ -1132,26 +1193,31 @@ export default function App() {
               <h1 className="song-title">{song.title}</h1>
               <p className="song-artist">{song.artist}</p>
               <p className="song-album">{song.album}{song.album && song.year ? ' · ' : ''}{song.year}</p>
-              <div className="song-links">
-                <a href={`https://open.spotify.com/search/${encodeURIComponent(song.title + ' ' + song.artist)}`}
-                  target="_blank" rel="noopener noreferrer" className="song-link spotify">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-                  Spotify
-                </a>
-                <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(song.title + ' ' + song.artist)}`}
-                  target="_blank" rel="noopener noreferrer" className="song-link youtube">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                  YouTube
-                </a>
-              </div>
             </>
           ) : (
             <h1 className="song-title placeholder">LyricSync</h1>
           )}
         </div>
         <div className="header-actions">
+          {song && (
+            <>
+              <a href={`https://open.spotify.com/search/${encodeURIComponent(song.title + ' ' + song.artist)}`}
+                target="_blank" rel="noopener noreferrer" className="icon-btn icon-link spotify" title="Cerca su Spotify" aria-label="Search on Spotify">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+              </a>
+              <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(song.title + ' ' + song.artist)}`}
+                target="_blank" rel="noopener noreferrer" className="icon-btn icon-link youtube" title="Cerca su YouTube" aria-label="Search on YouTube">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+              </a>
+            </>
+          )}
           {status === 'playing' && (
             <button className="icon-btn" onClick={forceNextSong} title="Prossima canzone" aria-label="Skip to next song">⏭</button>
+          )}
+          {discogsInfo?.tracklist?.length > 0 && (
+            <button className={`icon-btn ${showTracklist ? 'active' : ''}`} onClick={() => setShowTracklist(t => !t)} title="Tracklist album" aria-label="View tracklist">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+            </button>
           )}
           <button className="icon-btn" onClick={() => setShowHistory(h => !h)} title="Cronologia" aria-label="View history">🕒</button>
           <button className="icon-btn" onClick={toggleFullscreen} title={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'} aria-label="Toggle fullscreen">

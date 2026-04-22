@@ -131,43 +131,23 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   text-shadow: 0 1px 4px rgba(0,0,0,0.5);
 }
 
-/* ─── Song Links (Spotify/YouTube) ──────────────────────────────────────── */
-.song-links {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-.song-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 500;
+/* ─── Icon Links (Spotify/YouTube in header) ───────────────────────────── */
+.icon-link {
   text-decoration: none;
-  transition: all 0.25s ease;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
-  color: var(--text-mid);
-  backdrop-filter: blur(8px);
-  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.song-link:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-.song-link.spotify:hover {
-  background: rgba(30,215,96,0.15);
-  border-color: rgba(30,215,96,0.4);
+.icon-link.spotify:hover {
+  background: rgba(30,215,96,0.15) !important;
+  border-color: rgba(30,215,96,0.4) !important;
   color: #1ed760;
 }
-.song-link.youtube:hover {
-  background: rgba(255,0,0,0.12);
-  border-color: rgba(255,0,0,0.35);
+.icon-link.youtube:hover {
+  background: rgba(255,0,0,0.12) !important;
+  border-color: rgba(255,0,0,0.35) !important;
   color: #ff4444;
 }
-.song-link svg { flex-shrink: 0; }
 
 /* ─── Song Progress Bar ────────────────────────────────────────────────── */
 .song-progress-container {
@@ -207,8 +187,9 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 .header-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .icon-btn {
@@ -936,4 +917,101 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   color: var(--text-dim);
   flex-shrink: 0;
   letter-spacing: 0.02em;
+}
+
+/* ─── Tracklist Panel ────────────────────────────────────────────────────── */
+.tracklist-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
+  width: min(380px, 100vw);
+  background: rgba(12,10,20,0.96);
+  backdrop-filter: blur(20px);
+  border-left: 1.5px solid rgba(232,201,126,0.15);
+  display: flex; flex-direction: column;
+  animation: slideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow-y: auto;
+}
+.tracklist-album-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(232,201,126,0.08);
+}
+.tracklist-album-cover {
+  width: 64px; height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  flex-shrink: 0;
+}
+.tracklist-album-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.tracklist-album-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tracklist-album-artist {
+  font-size: 0.85rem;
+  color: var(--text-mid);
+}
+.tracklist-album-year {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.tracklist-list {
+  flex: 1;
+  padding: 8px 0;
+}
+.tracklist-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+.tracklist-item:hover {
+  background: rgba(232,201,126,0.06);
+}
+.tracklist-item.current {
+  background: rgba(232,201,126,0.1);
+  border-left-color: var(--accent);
+}
+.tracklist-item.current .tracklist-title {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tracklist-pos {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tracklist-title {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text-mid);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tracklist-duration {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.icon-btn.active {
+  background: rgba(232,201,126,0.2);
+  border-color: rgba(232,201,126,0.4);
 }
