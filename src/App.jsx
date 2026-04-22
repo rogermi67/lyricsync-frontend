@@ -237,6 +237,25 @@ export default function App() {
               year: data.year || prev.year,
               cover: data.cover || prev.cover,
             } : prev)
+            // Aggiorna campo Notes su Discogs con data ascolto
+            if (data.releaseId && data.instanceId) {
+              const oggi = new Date()
+              const dataStr = `Ascoltato il ${oggi.getDate().toString().padStart(2,'0')}/${(oggi.getMonth()+1).toString().padStart(2,'0')}/${oggi.getFullYear()}`
+              fetch(`${BACKEND}/discogs/update-field`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                body: JSON.stringify({
+                  releaseId: data.releaseId,
+                  instanceId: data.instanceId,
+                  folderId: data.folderId || 0,
+                  fieldId: 3,  // Notes
+                  value: dataStr
+                })
+              })
+                .then(r => r.json())
+                .then(r => { if (r.success) console.log(`💿 Discogs Notes aggiornato: "${dataStr}"`) })
+                .catch(e => console.warn('⚠️ Errore aggiornamento Discogs Notes:', e.message))
+            }
             // Pre-fetch testi di tutte le tracce dell'album in background
             if (data.tracklist && data.tracklist.length > 0) {
               const albumArtist = data.artist || song.artist
