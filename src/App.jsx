@@ -232,10 +232,42 @@ export default function App() {
           if (data.inCollection) {
             setSong(prev => prev ? {
               ...prev,
-              album: data.title || prev.album,  // titolo release Discogs (es. nome album originale)
+              album: data.title || prev.album,
               year: data.year || prev.year,
               cover: data.cover || prev.cover,
             } : prev)
+            // Pre-fetch testi di tutte le tracce dell'album in background
+            if (data.tracklist && data.tracklist.length > 0) {
+              const albumArtist = data.artist || song.artist
+              console.log(`📀 Pre-fetch testi: ${data.tracklist.length} tracce di "${data.title}"`)
+              data.tracklist.forEach((track, idx) => {
+                // Genera una chiave cache stabile per ogni traccia
+                const cacheKey = `${albumArtist}-${track.title}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+                const cached = getFromCache(cacheKey)
+                if (cached && (cached.syncedLyrics || cached.plainLyrics)) {
+                  return // già in cache
+                }
+                // Scarica con un piccolo ritardo per non sovraccaricare
+                setTimeout(() => {
+                  if (cancelled) return
+                  const params = new URLSearchParams({ title: track.title, artist: albumArtist })
+                  fetch(`${BACKEND}/lyrics?${params}`, { headers: authHeaders() })
+                    .then(r => r.json())
+                    .then(ldata => {
+                      if (ldata.found) {
+                        saveToCache(cacheKey, {
+                          title: track.title,
+                          artist: albumArtist,
+                          album: data.title,
+                          shazamKey: cacheKey
+                        }, ldata.syncedLyrics || null, ldata.plainLyrics || null)
+                        console.log(`📀 Pre-cached: "${track.title}"`)
+                      }
+                    })
+                    .catch(() => {})
+                }, (idx + 1) * 1500) // 1.5s tra una chiamata e l'altra
+              })
+            }
           }
         } else {
           setDiscogsInfo(null)
@@ -296,11 +328,13 @@ export default function App() {
   const fetchLyrics = useCallback(async (title, artist, album, offset, anchorTime = Date.now(), shazamKey = null) => {
     console.log(`📝 Cerco testi: "${title}" offset=${offset.toFixed(1)}s`)
 
-    // Controlla cache prima di chiamare il backend
-    if (shazamKey) {
-      const cached = getFromCache(shazamKey)
+    // Controlla cache: prima per shazamKey, poi per artista+titolo (pre-fetch da Discogs)
+    const altCacheKey = `${artist}-${title}`.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const keysToCheck = [shazamKey, altCacheKey].filter(Boolean)
+    for (const key of keysToCheck) {
+      const cached = getFromCache(key)
       if (cached && (cached.syncedLyrics || cached.plainLyrics)) {
-        console.log(`💾 Cache hit: "${title}" — uso testi dalla cache`)
+        console.log(`💾 Cache hit [${key === shazamKey ? 'shazam' : 'prefetch'}]: "${title}"`)
         if (cached.syncedLyrics) {
           const parsed = parseLRC(cached.syncedLyrics)
           setLyrics(parsed)
