@@ -77,6 +77,7 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   border: 1px solid rgba(232,201,126,0.2);
 }
 
+.cover-large.clickable { cursor: pointer; }
 .cover-large:hover {
   transform: scale(1.03);
   box-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 0 24px rgba(232,201,126,0.12);
@@ -1022,4 +1023,252 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
 .icon-btn.active {
   background: rgba(232,201,126,0.2);
   border-color: rgba(232,201,126,0.4);
+}
+
+/* ─── Galleria immagini lightbox ─────────────────────────────────────────── */
+.gallery-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+.gallery-container {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.gallery-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 10;
+  padding: 8px;
+}
+.gallery-image {
+  max-width: 80vw;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  transition: opacity 0.3s ease;
+}
+.gallery-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.gallery-type {
+  text-transform: capitalize;
+}
+.gallery-counter {
+  color: var(--text-mid);
+}
+.gallery-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-main);
+  font-size: 2.5rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  line-height: 1;
+  padding-bottom: 4px;
+}
+.gallery-nav:hover {
+  background: rgba(232,201,126,0.2);
+}
+.gallery-prev { left: -60px; }
+.gallery-next { right: -60px; }
+.gallery-thumbs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  max-width: 80vw;
+  padding: 4px 0;
+}
+.gallery-thumb {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0.5;
+  border: 2px solid transparent;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+.gallery-thumb.active {
+  opacity: 1;
+  border-color: var(--accent);
+}
+.gallery-thumb:hover {
+  opacity: 0.8;
+}
+.gallery-loading {
+  color: var(--text-dim);
+  font-size: 1rem;
+  padding: 40px;
+}
+@media (max-width: 768px) {
+  .gallery-prev { left: 8px; }
+  .gallery-next { right: 8px; }
+  .gallery-nav { width: 36px; height: 36px; font-size: 1.8rem; }
+  .gallery-image { max-width: 95vw; max-height: 65vh; }
+}
+
+/* ─── Pannello info artista ──────────────────────────────────────────────── */
+.artist-info-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  height: 100vh;
+  background: linear-gradient(180deg, rgba(22,22,38,0.98), rgba(14,14,26,0.98));
+  backdrop-filter: blur(20px);
+  z-index: 200;
+  overflow-y: auto;
+  animation: slideInRight 0.3s ease;
+  border-left: 1px solid rgba(232,201,126,0.1);
+  padding-bottom: 20px;
+}
+.artist-info-loading {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 30px 16px;
+  text-align: center;
+}
+.artist-info-content {
+  padding: 0 16px 16px;
+}
+.artist-info-image {
+  width: 100%;
+  max-height: 250px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.artist-info-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.5rem;
+  color: var(--accent);
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+.artist-info-text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-mid);
+}
+.artist-info-text p {
+  margin-bottom: 10px;
+}
+.artist-info-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(232,201,126,0.3);
+  transition: border-color 0.2s;
+}
+.artist-info-link:hover {
+  border-color: var(--accent);
+}
+
+/* ─── Pannello discografia ───────────────────────────────────────────────── */
+.discography-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  max-width: 90vw;
+  height: 100vh;
+  background: linear-gradient(180deg, rgba(22,22,38,0.98), rgba(14,14,26,0.98));
+  backdrop-filter: blur(20px);
+  z-index: 200;
+  overflow-y: auto;
+  animation: slideInRight 0.3s ease;
+  border-left: 1px solid rgba(232,201,126,0.1);
+  padding-bottom: 20px;
+}
+.discography-summary {
+  font-size: 0.8rem;
+  color: var(--accent);
+  padding: 8px 16px;
+  background: rgba(232,201,126,0.06);
+  border-bottom: 1px solid rgba(232,201,126,0.08);
+}
+.discography-list {
+  padding: 8px 0;
+}
+.discography-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  transition: background 0.2s;
+  border-left: 3px solid transparent;
+}
+.discography-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+.discography-item.in-collection {
+  border-left-color: var(--accent);
+  background: rgba(232,201,126,0.04);
+}
+.discography-thumb {
+  width: 45px;
+  height: 45px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.discography-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.discography-title {
+  font-size: 0.85rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.discography-year {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+.discography-badge {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }

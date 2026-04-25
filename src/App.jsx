@@ -160,7 +160,21 @@ export default function App() {
   const [showTracklist, setShowTracklist] = useState(false)
   const [discogsOAuth, setDiscogsOAuth] = useState({ authorized: false })
   const [oauthLoading, setOauthLoading] = useState(false)
+  // Galleria immagini disco
+  const [showGallery, setShowGallery] = useState(false)
+  const [galleryImages, setGalleryImages] = useState([])
+  const [galleryIndex, setGalleryIndex] = useState(0)
+  const [galleryLoading, setGalleryLoading] = useState(false)
+  // Info artista
+  const [showArtistInfo, setShowArtistInfo] = useState(false)
+  const [artistInfo, setArtistInfo] = useState(null)
+  const [artistInfoLoading, setArtistInfoLoading] = useState(false)
+  // Discografia artista
+  const [showDiscography, setShowDiscography] = useState(false)
+  const [discography, setDiscography] = useState(null)
+  const [discographyLoading, setDiscographyLoading] = useState(false)
 
+  const galleryTouchRef = useRef(null)
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
   const fallbackTimerRef = useRef(null)
@@ -830,6 +844,82 @@ export default function App() {
     return `${m}:${s.toString().padStart(2, '0')}`
   }
 
+  // ─── Galleria immagini disco ──────────────────────────────────────────────
+  const openGallery = useCallback(async () => {
+    if (!discogsInfo?.releaseId) return
+    setShowGallery(true)
+    setGalleryIndex(0)
+    setGalleryLoading(true)
+    try {
+      const r = await fetch(`${BACKEND}/discogs/images/${discogsInfo.releaseId}`, { headers: authHeaders() })
+      const data = await r.json()
+      setGalleryImages(data.images || [])
+    } catch { setGalleryImages([]) }
+    setGalleryLoading(false)
+  }, [discogsInfo])
+
+  const galleryPrev = useCallback(() => setGalleryIndex(i => i > 0 ? i - 1 : galleryImages.length - 1), [galleryImages.length])
+  const galleryNext = useCallback(() => setGalleryIndex(i => i < galleryImages.length - 1 ? i + 1 : 0), [galleryImages.length])
+
+  // Swipe support per galleria
+  const onGalleryTouchStart = useCallback((e) => {
+    galleryTouchRef.current = e.touches[0].clientX
+  }, [])
+  const onGalleryTouchEnd = useCallback((e) => {
+    if (galleryTouchRef.current === null) return
+    const diff = e.changedTouches[0].clientX - galleryTouchRef.current
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) galleryPrev()
+      else galleryNext()
+    }
+    galleryTouchRef.current = null
+  }, [galleryPrev, galleryNext])
+
+  // Keyboard navigation per galleria
+  useEffect(() => {
+    if (!showGallery) return
+    const handler = (e) => {
+      if (e.key === 'ArrowLeft') galleryPrev()
+      else if (e.key === 'ArrowRight') galleryNext()
+      else if (e.key === 'Escape') setShowGallery(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [showGallery, galleryPrev, galleryNext])
+
+  // ─── Info artista (Wikipedia IT) ─────────────────────────────────────────
+  const openArtistInfo = useCallback(async () => {
+    if (!song?.artist) return
+    setShowArtistInfo(true)
+    // Se già caricato per lo stesso artista, non ricaricare
+    if (artistInfo?.artist === song.artist) return
+    setArtistInfoLoading(true)
+    try {
+      const r = await fetch(`${BACKEND}/artist/info?artist=${encodeURIComponent(song.artist)}`, { headers: authHeaders() })
+      const data = await r.json()
+      if (data.found) {
+        setArtistInfo({ ...data, artist: song.artist })
+      } else {
+        setArtistInfo({ found: false, artist: song.artist })
+      }
+    } catch { setArtistInfo({ found: false, artist: song.artist }) }
+    setArtistInfoLoading(false)
+  }, [song?.artist, artistInfo])
+
+  // ─── Discografia artista ─────────────────────────────────────────────────
+  const openDiscography = useCallback(async () => {
+    if (!song?.artist) return
+    setShowDiscography(true)
+    if (discography?.artist === song.artist) return
+    setDiscographyLoading(true)
+    try {
+      const r = await fetch(`${BACKEND}/discogs/discography?artist=${encodeURIComponent(song.artist)}`, { headers: authHeaders() })
+      const data = await r.json()
+      setDiscography({ ...data, artist: song.artist })
+    } catch { setDiscography({ releases: [], artist: song.artist }) }
+    setDiscographyLoading(false)
+  }, [song?.artist, discography])
+
   const statusLabel = {
     idle: 'Premi play per iniziare',
     listening: 'In ascolto...',
@@ -1025,6 +1115,106 @@ export default function App() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Lightbox galleria immagini disco */}
+      {showGallery && (
+        <div className="gallery-overlay" onClick={() => setShowGallery(false)}>
+          <div className="gallery-container" onClick={e => e.stopPropagation()}
+            onTouchStart={onGalleryTouchStart} onTouchEnd={onGalleryTouchEnd}>
+            <button className="gallery-close" onClick={() => setShowGallery(false)}>✕</button>
+            {galleryLoading ? (
+              <div className="gallery-loading">Caricamento immagini...</div>
+            ) : galleryImages.length === 0 ? (
+              <div className="gallery-loading">Nessuna immagine disponibile</div>
+            ) : (
+              <>
+                <img src={galleryImages[galleryIndex]?.uri} alt={`Immagine ${galleryIndex + 1}`} className="gallery-image" />
+                <div className="gallery-info">
+                  <span className="gallery-type">{galleryImages[galleryIndex]?.type === 'primary' ? 'Copertina' : galleryImages[galleryIndex]?.type === 'secondary' ? 'Immagine' : galleryImages[galleryIndex]?.type}</span>
+                  <span className="gallery-counter">{galleryIndex + 1} / {galleryImages.length}</span>
+                </div>
+                {galleryImages.length > 1 && (
+                  <>
+                    <button className="gallery-nav gallery-prev" onClick={galleryPrev}>‹</button>
+                    <button className="gallery-nav gallery-next" onClick={galleryNext}>›</button>
+                  </>
+                )}
+                {galleryImages.length > 1 && (
+                  <div className="gallery-thumbs">
+                    {galleryImages.map((img, i) => (
+                      <img key={i} src={img.uri150 || img.uri} alt="" className={`gallery-thumb ${i === galleryIndex ? 'active' : ''}`}
+                        onClick={() => setGalleryIndex(i)} />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pannello info artista */}
+      {showArtistInfo && (
+        <div className="artist-info-panel">
+          <div className="history-header">
+            <span>Info Artista</span>
+            <button className="history-close" onClick={() => setShowArtistInfo(false)}>✕</button>
+          </div>
+          {artistInfoLoading ? (
+            <div className="artist-info-loading">Caricamento da Wikipedia...</div>
+          ) : artistInfo?.found ? (
+            <div className="artist-info-content">
+              {artistInfo.image && <img src={artistInfo.image} alt={artistInfo.title} className="artist-info-image" />}
+              <h3 className="artist-info-title">{artistInfo.title}</h3>
+              <div className="artist-info-text">
+                {artistInfo.extract.split('\n').map((p, i) => (
+                  p.trim() ? <p key={i}>{p}</p> : <br key={i} />
+                ))}
+              </div>
+              <a href={artistInfo.wikiUrl} target="_blank" rel="noopener noreferrer" className="artist-info-link">
+                Leggi su Wikipedia →
+              </a>
+            </div>
+          ) : (
+            <div className="artist-info-loading">Nessuna informazione trovata per "{song?.artist}"</div>
+          )}
+        </div>
+      )}
+
+      {/* Pannello discografia artista */}
+      {showDiscography && (
+        <div className="discography-panel">
+          <div className="history-header">
+            <span>Discografia{discography?.artist ? ` — ${discography.artist}` : ''}</span>
+            <button className="history-close" onClick={() => setShowDiscography(false)}>✕</button>
+          </div>
+          {discographyLoading ? (
+            <div className="artist-info-loading">Caricamento discografia...</div>
+          ) : discography?.releases?.length > 0 ? (
+            <>
+              {discography.totalInCollection > 0 && (
+                <div className="discography-summary">
+                  💿 {discography.totalInCollection} album nella tua collezione su {discography.releases.length} totali
+                </div>
+              )}
+              <div className="discography-list">
+                {discography.releases.map((r, i) => (
+                  <div key={i} className={`discography-item ${r.inCollection ? 'in-collection' : ''}`}>
+                    {r.thumb && <img src={r.thumb} alt="" className="discography-thumb" />}
+                    <div className="discography-meta">
+                      <span className="discography-title">{r.title}</span>
+                      {r.year > 0 && <span className="discography-year">{r.year}</span>}
+                    </div>
+                    {r.inCollection && <span className="discography-badge">💿</span>}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="artist-info-loading">Nessun album trovato</div>
+          )}
         </div>
       )}
 
@@ -1253,9 +1443,11 @@ export default function App() {
 
       {/* Header */}
       <header className="song-header">
-        {/* Cover — posizione assoluta a destra */}
+        {/* Cover — posizione assoluta a destra, cliccabile per galleria */}
         {song?.cover && (
-          <img src={song.cover} alt="album cover" className="cover-large" loading="lazy" />
+          <img src={song.cover} alt="album cover" className={`cover-large ${discogsInfo?.releaseId ? 'clickable' : ''}`}
+            loading="lazy" onClick={() => discogsInfo?.releaseId && openGallery()}
+            title={discogsInfo?.releaseId ? 'Clicca per vedere le immagini del disco' : ''} />
         )}
         <div className={`song-meta ${song ? 'visible' : ''}`}>
           {song ? (
@@ -1284,6 +1476,12 @@ export default function App() {
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
                 </button>
               )}
+              <button className={`icon-btn ${showArtistInfo ? 'active' : ''}`} onClick={openArtistInfo} title="Info artista" aria-label="Artist info">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+              </button>
+              <button className={`icon-btn ${showDiscography ? 'active' : ''}`} onClick={openDiscography} title="Discografia" aria-label="Discography">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-12.5c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 5.5c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/></svg>
+              </button>
               <div className="header-actions-sep" />
             </>
           )}
