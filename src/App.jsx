@@ -1364,7 +1364,7 @@ export default function App() {
                 <p className="settings-hint">Autorizzazione scrittura (OAuth 1.0a)</p>
                 {discogsOAuth.authorized ? (
                   <div className="settings-discogs-status">
-                    <span className="discogs-connected">✅ Scrittura autorizzata{discogsOAuth.authorizedAt ? ` (${new Date(discogsOAuth.authorizedAt).toLocaleDateString('it-IT')})` : ''}</span>
+                    <span className="discogs-connected">✅ Scrittura autorizzata{discogsOAuth.username ? ` come ${discogsOAuth.username}` : ''}{discogsOAuth.authorizedAt ? ` (${new Date(discogsOAuth.authorizedAt).toLocaleDateString('it-IT')})` : ''}</span>
                     <button className="settings-btn-small" onClick={async () => {
                       try {
                         await fetch(`${BACKEND}/discogs/oauth/revoke`, { method: 'POST', headers: authHeaders() })
