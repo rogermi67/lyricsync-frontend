@@ -266,7 +266,7 @@ export default function App() {
                 body: JSON.stringify({
                   releaseId: data.releaseId,
                   instanceId: data.instanceId,
-                  folderId: data.folderId || 0,
+                  folderId: data.folderId || 1,
                   fieldId: 3,  // Notes
                   value: dataStr
                 })
