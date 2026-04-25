@@ -837,6 +837,20 @@ export default function App() {
     setTranslating(false)
   }, [translating, showTranslation, translatedLyrics, lyrics, plainLyrics, song, transLang])
 
+  // Auto-traduzione: quando arriva un nuovo testo e l'opzione è attiva, traduci automaticamente
+  useEffect(() => {
+    if (!autoTranslate) return
+    if (!song?.shazamKey) return
+    if (lyrics.length === 0 && !plainLyrics) return
+    // Non ritradurre se è già stata tradotta per questa canzone
+    if (translatedLyrics._songKey === song.shazamKey) return
+    // Piccolo delay per assicurarsi che i testi siano completamente caricati
+    const timer = setTimeout(() => {
+      translateLyrics()
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [autoTranslate, song?.shazamKey, lyrics.length, plainLyrics]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const formatTime = (seconds) => {
     if (!seconds || seconds < 0) return '0:00'
     const m = Math.floor(seconds / 60)
