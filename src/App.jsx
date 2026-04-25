@@ -158,6 +158,8 @@ export default function App() {
   const [discogsFields, setDiscogsFields] = useState({})
   const [discogsFieldsForm, setDiscogsFieldsForm] = useState({})
   const [showTracklist, setShowTracklist] = useState(false)
+  const [discogsOAuth, setDiscogsOAuth] = useState({ authorized: false })
+  const [oauthLoading, setOauthLoading] = useState(false)
 
   const streamRef = useRef(null)
   const recognizeTimerRef = useRef(null)
@@ -180,6 +182,8 @@ export default function App() {
   const silenceReadyRef = useRef(false)
   const silenceActiveRef = useRef(false)
   const wakeLockRef = useRef(null)
+  const lastPrefetchedAlbumRef = useRef(null)  // evita pre-fetch duplicato per stesso album
+  const lastUpdatedReleaseRef = useRef(null)   // evita update Discogs duplicato per stesso album
 
   const fetchCounter = useCallback(async () => {
     try { const res = await fetch(`${BACKEND}/counter`, { headers: authHeaders() }); setCounter(await res.json()) } catch {}
@@ -237,8 +241,9 @@ export default function App() {
               year: data.year || prev.year,
               cover: data.cover || prev.cover,
             } : prev)
-            // Aggiorna campo Notes su Discogs con data ascolto
-            if (data.releaseId && data.instanceId) {
+            // Aggiorna campo Notes su Discogs con data ascolto (solo se non già aggiornato per questa release)
+            if (data.releaseId && data.instanceId && lastUpdatedReleaseRef.current !== data.releaseId) {
+              lastUpdatedReleaseRef.current = data.releaseId
               const oggi = new Date()
               const dataStr = `Ascoltato il ${oggi.getDate().toString().padStart(2,'0')}/${(oggi.getMonth()+1).toString().padStart(2,'0')}/${oggi.getFullYear()}`
               fetch(`${BACKEND}/discogs/update-field`, {
@@ -255,9 +260,12 @@ export default function App() {
                 .then(r => r.json())
                 .then(r => { if (r.success) console.log(`💿 Discogs Notes aggiornato: "${dataStr}"`) })
                 .catch(e => console.warn('⚠️ Errore aggiornamento Discogs Notes:', e.message))
+            } else if (data.releaseId && lastUpdatedReleaseRef.current === data.releaseId) {
+              console.log(`💿 Discogs Notes: già aggiornato per release ${data.releaseId}, skip`)
             }
-            // Pre-fetch testi di tutte le tracce dell'album in background
-            if (data.tracklist && data.tracklist.length > 0) {
+            // Pre-fetch testi di tutte le tracce dell'album in background (solo se album diverso dall'ultimo)
+            if (data.tracklist && data.tracklist.length > 0 && lastPrefetchedAlbumRef.current !== data.releaseId) {
+              lastPrefetchedAlbumRef.current = data.releaseId
               const albumArtist = data.artist || song.artist
               console.log(`📀 Pre-fetch testi: ${data.tracklist.length} tracce di "${data.title}"`)
               data.tracklist.forEach((track, idx) => {
@@ -287,6 +295,8 @@ export default function App() {
                     .catch(() => {})
                 }, (idx + 1) * 1500) // 1.5s tra una chiamata e l'altra
               })
+            } else if (data.tracklist && data.tracklist.length > 0) {
+              console.log(`📀 Pre-fetch: album ${data.releaseId} già pre-fetchato, skip`)
             }
           }
         } else {
@@ -876,6 +886,11 @@ export default function App() {
           if (data.username) setDiscogsForm(f => ({ ...f, username: data.username }))
         })
         .catch(() => {})
+      // Carica stato OAuth Discogs
+      fetch(`${BACKEND}/discogs/oauth/status`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(data => setDiscogsOAuth(data))
+        .catch(() => {})
       // Carica nomi campi personalizzati
       fetch(`${BACKEND}/discogs/fields`, { headers: authHeaders() })
         .then(r => r.json())
@@ -1138,6 +1153,56 @@ export default function App() {
                       }
                     } catch { alert('Errore di connessione') }
                   }}>Collega Discogs</button>
+              </div>
+            )}
+            {discogsConfig.configured && (
+              <div className="settings-discogs-oauth">
+                <p className="settings-hint">Autorizzazione scrittura (OAuth 1.0a)</p>
+                {discogsOAuth.authorized ? (
+                  <div className="settings-discogs-status">
+                    <span className="discogs-connected">✅ Scrittura autorizzata{discogsOAuth.authorizedAt ? ` (${new Date(discogsOAuth.authorizedAt).toLocaleDateString('it-IT')})` : ''}</span>
+                    <button className="settings-btn-small" onClick={async () => {
+                      try {
+                        await fetch(`${BACKEND}/discogs/oauth/revoke`, { method: 'POST', headers: authHeaders() })
+                        setDiscogsOAuth({ authorized: false })
+                      } catch {}
+                    }}>Revoca</button>
+                  </div>
+                ) : (
+                  <div className="settings-discogs-status">
+                    <span style={{ color: 'rgba(240,237,232,0.5)', fontSize: '0.85rem' }}>Necessaria per aggiornare il campo Note con la data ascolto</span>
+                    <button className="settings-btn-small" disabled={oauthLoading} onClick={async () => {
+                      setOauthLoading(true)
+                      try {
+                        const callbackUrl = `${BACKEND}/discogs/oauth/callback`
+                        const r = await fetch(`${BACKEND}/discogs/oauth/start?callback=${encodeURIComponent(callbackUrl)}`, { headers: authHeaders() })
+                        const data = await r.json()
+                        if (data.authorizeUrl) {
+                          // Apri finestra popup per autorizzazione Discogs
+                          const popup = window.open(data.authorizeUrl, 'discogs_oauth', 'width=800,height=600,scrollbars=yes')
+                          // Poll per verificare se l'autorizzazione è completata
+                          const checkInterval = setInterval(async () => {
+                            try {
+                              if (popup && popup.closed) {
+                                clearInterval(checkInterval)
+                                // Controlla se l'autorizzazione è andata a buon fine
+                                const statusRes = await fetch(`${BACKEND}/discogs/oauth/status`, { headers: authHeaders() })
+                                const statusData = await statusRes.json()
+                                setDiscogsOAuth(statusData)
+                                setOauthLoading(false)
+                              }
+                            } catch { clearInterval(checkInterval); setOauthLoading(false) }
+                          }, 1000)
+                          // Timeout dopo 5 minuti
+                          setTimeout(() => { clearInterval(checkInterval); setOauthLoading(false) }, 300000)
+                        } else {
+                          alert(data.error || 'Errore avvio OAuth')
+                          setOauthLoading(false)
+                        }
+                      } catch (e) { alert('Errore: ' + e.message); setOauthLoading(false) }
+                    }}>{oauthLoading ? 'Attendi...' : '🔐 Autorizza scrittura Discogs'}</button>
+                  </div>
+                )}
               </div>
             )}
             {discogsConfig.configured && (

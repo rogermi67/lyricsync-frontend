@@ -797,6 +797,11 @@ html, body, #root { height: 100%; width: 100%; overflow: hidden; background: var
   flex-direction: column;
   gap: 8px;
 }
+.settings-discogs-oauth {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(232,201,126,0.1);
+}
 .settings-discogs-fields {
   margin-top: 14px;
   display: flex;
