@@ -443,15 +443,24 @@ export default function App() {
 
     try {
       const blob = await new Promise((resolve) => {
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+        // Usa il miglior codec disponibile con bitrate alto per fingerprinting accurato
+        let mimeType = 'audio/webm;codecs=opus'
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = 'audio/webm'
+        }
+        const recorder = new MediaRecorder(stream, {
+          mimeType,
+          audioBitsPerSecond: 128000   // 128kbps per qualità alta
+        })
         const chunks = []
         recorder.ondataavailable = e => chunks.push(e.data)
-        recorder.onstop = () => resolve(new Blob(chunks, { type: 'audio/webm' }))
+        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType.split(';')[0] }))
         recorder.start()
-        setTimeout(() => { if (recorder.state === 'recording') recorder.stop() }, 5000)
+        setTimeout(() => { if (recorder.state === 'recording') recorder.stop() }, 8000) // 8 secondi per miglior riconoscimento
       })
 
-      if (blob.size < 1000) throw new Error('Audio troppo corto')
+      if (blob.size < 2000) throw new Error('Audio troppo corto')
+      console.log(`🎙️ Audio catturato: ${(blob.size / 1024).toFixed(0)}KB, tipo: ${blob.type}`)
 
       const formData = new FormData()
       formData.append('audio', blob, 'chunk.webm')
@@ -723,7 +732,15 @@ export default function App() {
       setError('')
       setStatus('listening')
       isListeningRef.current = true
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,    // disabilita: rovina il segnale musicale
+          noiseSuppression: false,    // disabilita: filtra via la musica
+          autoGainControl: false,     // disabilita: altera i livelli audio
+          sampleRate: 44100,          // qualità CD
+          channelCount: 1             // mono (sufficiente per fingerprinting)
+        }
+      })
       streamRef.current = stream
       startSilenceDetection(stream)
       startVoiceCommand(stream)
